@@ -1,76 +1,87 @@
 package main
 
 import (
-    "encoding/csv"
-    "encoding/json"
-    "fmt"
-    "io/ioutil"
-	  "log"
-    "os"
+	"encoding/csv"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"os"
+	"strconv"
 )
 
 // Output struct
 type Output struct {
-    QuantileName string 'json:"quantileName"'
-    UUID string 'json:"uuid"'
-    P99 int  'json:"p99"'
-    P95 int  'json:"p95"'
-	P50 int  'json:"p50"'
-	Max int  'json:"max"'
-	Avg int  'json:"avg"'
-	Timestamp string  'json:"timestamp"'
-	MetricName string  'json:"metricName"'
-	JobName string  'json:"jobName"'
+	QuantileName string "json:'quantileName'"
+	UUID         string "json:'uuid'"
+	P99          int    "json:'p99'"
+	P95          int    "json:'p95'"
+	P50          int    "json:'p50'"
+	Max          int    "json:'max'"
+	Avg          int    "json:'avg'"
+	Timestamp    string "json:'timestamp'"
+	MetricName   string "json:'metricName'"
+	JobName      string "json:'jobName'"
 }
 
 func convert_json_to_csv(source string, destination string) error {
 
 	// Read the JSON file into the struct array
-	source_file, err := os.Open(source)
+	data, err := ioutil.ReadFile(source)
 	if err != nil {
 		return err
 	}
 
-	defer source_file.Close()
-  
-
-	var json_data []Output
-	err := json.NewDecoder(source_file).Decode(&json_data)
+	//unmarshal data
+	var d []Output
+	err = json.Unmarshal([]byte(data), &d)
 	if err != nil {
 		return err
 	}
 
-	// Create new file
-	output_file, err := os.Create(destination)
+	//create csv file
+	f, err := os.Create(destination)
 	if err != nil {
 		return err
 	}
-	defer output_file.Close()
+	defer f.Close()
 
-	// Write the header of the CSV file
-	write := csv.NewWriter(output_file)
-	defer writer.Flush()
-
-	header := []{"quantileName" string, "uuid" string, "p99" int, "p95" int, "p50" int, "max" int, "avg" int, "timestamp" string, "metricName" string, "jobName" string}
-    err := writer.Write(header)
+	//Write json data to csv file
+	w := csv.NewWriter(f)
+	header := []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
+	err = w.Write(header)
 	if err != nil {
 		return err
 	}
 
-	for _, o := range json_data {
+	for _, o := range d {
 		var csvRow []string
-		csvRow = append(csvRow, o.QuantileName, o.UUID, o.P99, o.P95, o.P50, o.Max, o.Avg, o.Timestamp, o.MetricName, o.JobName)
-		err := writer.Write(csvRow)
+		csvRow = append(csvRow, o.QuantileName, o.UUID, strconv.Itoa(o.P99), strconv.Itoa(o.P95), strconv.Itoa(o.P50), strconv.Itoa(o.Max), strconv.Itoa(o.Avg), o.Timestamp, o.MetricName, o.JobName)
+		err := w.Write(csvRow)
 		if err != nil {
 			return err
 		}
 	}
+
+	// for _, obj := range d {
+	// 	var row []string
+	// 	row = append(row, obj.QuantileName)
+	// 	row = append(row, obj.UUID)
+	// 	row = append(row, strconv.Itoa(obj.P99))
+	// 	row = append(row, strconv.Itoa(obj.P95))
+	// 	row = append(row, strconv.Itoa(obj.P50))
+	// 	row = append(row, strconv.Itoa(obj.Avg))
+	// 	row = append(row, obj.Timestamp)
+	// 	row = append(row, obj.MetricName)
+	// 	row = append(row, obj.JobName)
+	// 	w.Write(row)
+	// }
+	w.Flush()
 	return nil
 }
 
 func main() {
-  err := convert_json_to_csv("collected-metrics/init-served-job-podLatency-summary.json", "output.csv")
-  if err != nil {
-	log.Fatal(err)
-  }
+	err := convert_json_to_csv("./init-served-job-podLatency-summary.json", "output.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
 }
