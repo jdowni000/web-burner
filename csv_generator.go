@@ -23,6 +23,13 @@ type Output struct {
 	JobName      string "json:'jobName'"
 }
 
+func main() {
+	err := convert_json_to_csv("./init-served-job-podLatency-summary.json", "output.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func convert_json_to_csv(source string, destination string) error {
 
 	// Read the JSON file into the struct array
@@ -77,11 +84,4 @@ func convert_json_to_csv(source string, destination string) error {
 	// }
 	w.Flush()
 	return nil
-}
-
-func main() {
-	err := convert_json_to_csv("./init-served-job-podLatency-summary.json", "output.csv")
-	if err != nil {
-		log.Fatal(err)
-	}
 }
