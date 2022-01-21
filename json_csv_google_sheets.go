@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
+
+	"github.com/cristoper/gsheet/gdrive"
+	"github.com/cristoper/gsheet/gsheets"
 )
 
 // Output struct
@@ -25,6 +30,12 @@ type Output struct {
 
 func main() {
 	err := convert_json_to_csv("./init-served-job-podLatency-summary.json", "output.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// sheet_id, err := create_google_sheet("test-Friday", "./test-web-burner-8a2dce06046f.json")
+	err = write_to_google_sheet("test_friday.csv", "1OQsqNu96iZ2DBBcJBJdFFzYyUahTsZbF", "./output.csv")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,6 +67,7 @@ func convert_json_to_csv(source string, destination string) error {
 	w := csv.NewWriter(f)
 	header := []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
 	err = w.Write(header)
+
 	if err != nil {
 		return err
 	}
@@ -68,20 +80,39 @@ func convert_json_to_csv(source string, destination string) error {
 			return err
 		}
 	}
-
-	// for _, obj := range d {
-	// 	var row []string
-	// 	row = append(row, obj.QuantileName)
-	// 	row = append(row, obj.UUID)
-	// 	row = append(row, strconv.Itoa(obj.P99))
-	// 	row = append(row, strconv.Itoa(obj.P95))
-	// 	row = append(row, strconv.Itoa(obj.P50))
-	// 	row = append(row, strconv.Itoa(obj.Avg))
-	// 	row = append(row, obj.Timestamp)
-	// 	row = append(row, obj.MetricName)
-	// 	row = append(row, obj.JobName)
-	// 	w.Write(row)
-	// }
 	w.Flush()
+	return nil
+}
+
+func write_to_google_sheet(sheet_name string, parent string, csv_file string) error {
+
+	var r io.Reader
+
+	gdrive_srv, err := gdrive.NewServiceWithCtx(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	new_sheet, err := gdrive_srv.CreateFile(sheet_name, parent, r)
+	if err != nil {
+		return err
+	}
+	log.Println(new_sheet.Id)
+
+	gsheet_srv, err := gsheets.NewServiceWithCtx(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	r, err = os.Open(csv_file)
+	if err != nil {
+		return err
+	}
+
+	resp, err := gsheet_srv.UpdateRangeCSV(new_sheet.Id, "A001", r)
+	if err != nil {
+		return err
+	}
+	log.Println(resp)
 	return nil
 }
