@@ -4,18 +4,25 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"flag"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/cristoper/gsheet/gdrive"
 	"github.com/cristoper/gsheet/gsheets"
 )
 
+var json_file_path string
+var csv_file_name string
+var google_sheet_name string
+var google_parent_id string
+
 // Output struct
-type Output struct {
+type PL_JsonStruct struct {
 	QuantileName string "json:'quantileName'"
 	UUID         string "json:'uuid'"
 	P99          int    "json:'p99'"
@@ -28,14 +35,50 @@ type Output struct {
 	JobName      string "json:'jobName'"
 }
 
+type JsonStruct struct {
+	Timestamp  string "json:'timestamp'"
+	Value      int    "json:'value'"
+	UUID       string "json:'uuid'"
+	Query      string "json:'query'"
+	MetricName string "json:'metricName'"
+	JobName    string "json:'jobName'"
+}
+
+func init() {
+
+	j := flag.String("j", "", "path to json file")
+	c := flag.String("c", "", "csv file name")
+	g := flag.String("g", "", "google sheet name")
+	p := flag.String("p", "", "google sheet parent id")
+	flag.Parse()
+
+	json_file_path = derefString(j)
+	csv_file_name = derefString(c)
+	google_sheet_name = derefString(g)
+	google_parent_id = derefString(p)
+
+	if json_file_path == "" {
+		log.Fatal("Please provide path to json file requested using flag '-j'")
+	}
+	if csv_file_name == "" {
+		log.Fatal("Please provide file name for csv file using flag '-c'")
+	}
+	if google_sheet_name == "" {
+		log.Fatal("Please provide file name for the google sheet file using flag '-g'")
+	}
+	if google_parent_id == "" {
+		log.Fatal("Please provide google sheets parent folder id using flag '-p'")
+	}
+}
+
 func main() {
-	err := convert_json_to_csv("./init-served-job-podLatency-summary.json", "output.csv")
+	err := convert_json_to_csv(json_file_path, csv_file_name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// sheet_id, err := create_google_sheet("test-Friday", "./test-web-burner-8a2dce06046f.json")
-	err = write_to_google_sheet("test_friday.csv", "1OQsqNu96iZ2DBBcJBJdFFzYyUahTsZbF", "./output.csv")
+	err = write_to_google_sheet(google_sheet_name+".csv", google_parent_id, "./"+csv_file_name)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,38 +92,74 @@ func convert_json_to_csv(source string, destination string) error {
 		return err
 	}
 
-	//unmarshal data
-	var d []Output
-	err = json.Unmarshal([]byte(data), &d)
-	if err != nil {
-		return err
-	}
-
-	//create csv file
-	f, err := os.Create(destination)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	//Write json data to csv file
-	w := csv.NewWriter(f)
-	header := []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
-	err = w.Write(header)
-
-	if err != nil {
-		return err
-	}
-
-	for _, o := range d {
-		var csvRow []string
-		csvRow = append(csvRow, o.QuantileName, o.UUID, strconv.Itoa(o.P99), strconv.Itoa(o.P95), strconv.Itoa(o.P50), strconv.Itoa(o.Max), strconv.Itoa(o.Avg), o.Timestamp, o.MetricName, o.JobName)
-		err := w.Write(csvRow)
+	//Determing which struct to use and unmarshal json
+	var pl []PL_JsonStruct
+	var js []JsonStruct
+	var header []string
+	if strings.Contains(json_file_path, "job-podLatency-summary.json") {
+		//unmarshal data
+		err = json.Unmarshal([]byte(data), &pl)
 		if err != nil {
 			return err
 		}
+		header = []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
+
+		//create csv file
+		f, err := os.Create(destination)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		//Write json data to csv file
+		w := csv.NewWriter(f)
+		err = w.Write(header)
+
+		if err != nil {
+			return err
+		}
+
+		for _, o := range pl {
+			var csvRow []string
+			csvRow = append(csvRow, o.QuantileName, o.UUID, strconv.Itoa(o.P99), strconv.Itoa(o.P95), strconv.Itoa(o.P50), strconv.Itoa(o.Max), strconv.Itoa(o.Avg), o.Timestamp, o.MetricName, o.JobName)
+			err := w.Write(csvRow)
+			if err != nil {
+				return err
+			}
+		}
+		w.Flush()
+	} else {
+		//unmarshal data
+		err = json.Unmarshal([]byte(data), &js)
+		if err != nil {
+			return err
+		}
+		header = []string{"timestamp", "value", "uuid", "query", "metricName", "jobName"}
+		//create csv file
+		f, err := os.Create(destination)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		//Write json data to csv file
+		w := csv.NewWriter(f)
+		err = w.Write(header)
+
+		if err != nil {
+			return err
+		}
+
+		for _, o := range js {
+			var csvRow []string
+			csvRow = append(csvRow, o.Timestamp, strconv.Itoa(o.Value), o.UUID, o.Query, o.MetricName, o.JobName)
+			err := w.Write(csvRow)
+			if err != nil {
+				return err
+			}
+		}
+		w.Flush()
 	}
-	w.Flush()
 	return nil
 }
 
@@ -115,4 +194,12 @@ func write_to_google_sheet(sheet_name string, parent string, csv_file string) er
 	}
 	log.Println(resp)
 	return nil
+}
+
+func derefString(s *string) string {
+	if s != nil {
+		return *s
+	}
+
+	return ""
 }
