@@ -96,25 +96,37 @@ func convert_json_to_csv(source string, destination string) error {
 	var pl []PL_JsonStruct
 	var js []JsonStruct
 	var header []string
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal("Could not find pwd to check for existing files! Aboritng!")
+	}
+
 	if strings.Contains(json_file_path, "job-podLatency-summary.json") {
 		//unmarshal data
 		err = json.Unmarshal([]byte(data), &pl)
 		if err != nil {
 			return err
 		}
-		header = []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
 
-		//create csv file
-		f, err := os.Create(destination)
+		//Delete csv file if it exists and create a new one
+		_, err := os.Stat(wd + "/" + destination)
+		if err == nil {
+			log.Println("CSV filename " + destination + " already exists: Removing file before proceeding!")
+			err = os.Remove(destination)
+			if err != nil {
+				log.Fatal("Failed to remove CSV file with the same name as requested. Terminating to ensure accurate data")
+			}
+		}
+		file, err := os.Create(destination)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer file.Close()
 
 		//Write json data to csv file
-		w := csv.NewWriter(f)
+		header = []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
+		w := csv.NewWriter(file)
 		err = w.Write(header)
-
 		if err != nil {
 			return err
 		}
@@ -134,21 +146,31 @@ func convert_json_to_csv(source string, destination string) error {
 		if err != nil {
 			return err
 		}
-		header = []string{"timestamp", "value", "uuid", "query", "metricName", "jobName"}
-		//create csv file
-		f, err := os.Create(destination)
+
+		//Delete csv file if it exists and create a new one
+		_, err := os.Stat(wd + "/" + destination)
+		if err == nil {
+			log.Println("CSV filename " + destination + " already exists: Removing file before proceeding!")
+			err = os.Remove(destination)
+			if err != nil {
+				log.Fatal("Failed to remove CSV file with the same name as requested. Terminating to ensure accurate data")
+			}
+		}
+		file, err := os.Create(destination)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer file.Close()
 
 		//Write json data to csv file
-		w := csv.NewWriter(f)
+		header = []string{"timestamp", "value", "uuid", "query", "metricName", "jobName"}
+		w := csv.NewWriter(file)
 		err = w.Write(header)
-
 		if err != nil {
 			return err
 		}
+
+		log.Println("TEST TEST TEST")
 
 		for _, o := range js {
 			var csvRow []string
@@ -176,7 +198,6 @@ func write_to_google_sheet(sheet_name string, parent string, csv_file string) er
 	if err != nil {
 		return err
 	}
-	log.Println(new_sheet.Id)
 
 	gsheet_srv, err := gsheets.NewServiceWithCtx(context.TODO())
 	if err != nil {
@@ -192,7 +213,7 @@ func write_to_google_sheet(sheet_name string, parent string, csv_file string) er
 	if err != nil {
 		return err
 	}
-	log.Println(resp)
+	log.Println("New google sheet id is:" + resp.SpreadsheetId)
 	return nil
 }
 
