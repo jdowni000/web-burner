@@ -22,7 +22,6 @@ var json_file_path string
 var csv_file_name string
 var google_sheet_name string
 var google_parent_id string
-var reader io.Reader
 
 // Struct specifically for Pod Latency summary json files
 type PodLatencyStruct struct {
@@ -84,10 +83,10 @@ func init() {
 		log.Fatal("Please provide file name for csv file using flag '-c'")
 	}
 	if google_sheet_name == "" {
-		log.Fatal("Please provide file name for the google sheet file using flag '-g'")
+		log.Fatal("Please provide a name for the requested new google sheet file using flag '-g'")
 	}
 	if google_parent_id == "" {
-		log.Fatal("Please provide google sheets parent folder id using flag '-p'")
+		log.Fatal("Please provide the new google sheets parent folder id using flag '-p'")
 	}
 
 }
@@ -117,7 +116,7 @@ func main() {
 	//upload csv to google sheets
 	resp, err := write_to_google_sheet(csv_file_name, google_sheet_name, google_parent_id, sheed_id)
 	error_check(err)
-	log.Println("Finished creating new sheet in sheet id " + resp.SpreadsheetId)
+	log.Println("Finished writing to google sheet " + google_sheet_name + " with sheet id " + resp.SpreadsheetId)
 }
 
 //func create_csv creates a csv file
@@ -226,7 +225,7 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 				all_node_names = append(all_node_names, node.Labels.Node)
 			}
 		}
-	} else if key == "int" {
+	} else {
 		for _, all := range jint {
 			if !(exists(all_job_names, all.JobName)) {
 				all_job_names = append(all_job_names, all.JobName)
@@ -383,7 +382,7 @@ func write_to_google_sheet(csv_file string, google_sheet_name string, parent str
 	default_string[0][0] = "Web-Burner Metrics from /home/kni/web-burner/collected-metrics"
 
 	response, err := gsheet_srv.UpdateRangeStrings(sheet_id, "A001", default_string)
-	log.Println(response)
+	log.Println("Response from updating Sheet1: ", response)
 
 	//create new sheet
 	log.Println("Creating new sheet in " + google_sheet_name)
@@ -397,10 +396,12 @@ func write_to_google_sheet(csv_file string, google_sheet_name string, parent str
 		return empty, err
 	}
 
+	log.Println("Attempting to write CSV file", csv_file, "to new sheet")
 	resp, err := gsheet_srv.UpdateRangeCSV(sheet_id, google_sheet_name, r)
 	if err != nil {
 		return empty, err
 	}
+	log.Println("Successfully wrote CSV file", csv_file, "to new sheet")
 	return resp, nil
 }
 
