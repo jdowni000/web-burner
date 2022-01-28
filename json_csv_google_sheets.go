@@ -186,6 +186,14 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 		err := json.Unmarshal([]byte(data), &jint)
 		if err != nil {
 			return err
+		} else {
+			//default key and struct
+			key = "int"
+			//unmarshal data
+			err := json.Unmarshal([]byte(data), &jint)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
