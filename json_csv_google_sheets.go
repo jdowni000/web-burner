@@ -15,6 +15,7 @@ import (
 
 	"github.com/cristoper/gsheet/gdrive"
 	"github.com/cristoper/gsheet/gsheets"
+	"google.golang.org/api/sheets/v4"
 )
 
 var json_file_path string
@@ -101,22 +102,26 @@ func main() {
 	struct_req := json_identifier(json_file_path)
 
 	//create csv file and write data
+	csv_file_name = csv_file_name + ".csv"
 	err = create_csv(wd, csv_file_name, json_file_path, struct_req)
 	error_check(err)
-
 	log.Println("Finished creating csv file with data from json file!")
 
 	// //create google sheet
-	// sheed_id, err := create_gs(google_sheet_name, google_parent_id)
-	// error_check(err)
+	google_sheet_name = google_sheet_name + ".csv"
+	log.Println("Creating new google sheet named " + google_sheet_name)
+	sheed_id, err := create_gs(google_sheet_name, google_parent_id)
+	error_check(err)
+	log.Println("Google sheet " + google_sheet_name + " created with id " + sheed_id)
 
-	// //upload csv to google sheets
-
+	//upload csv to google sheets
+	resp, err := write_to_google_sheet(csv_file_name, google_sheet_name, google_parent_id, sheed_id)
+	error_check(err)
+	log.Println("Finished creating new sheet in sheet id " + resp.SpreadsheetId)
 }
 
 //func create_csv creates a csv file
 func create_csv(wd string, csv_file_name string, json_file string, struct_req string) error {
-	csv_file_name = csv_file_name + ".csv"
 	//Delete csv file if it exists
 	_, err := os.Stat(wd + "/" + csv_file_name)
 	if err == nil {
@@ -339,7 +344,7 @@ func json_identifier(json_file string) string {
 }
 
 //func create_gs creates a new google spreadsheet
-func create_gs(sheet_name string, parent string) (string, error) {
+func create_gs(google_sheet_name string, parent string) (string, error) {
 	var r io.Reader
 
 	gdrive_srv, err := gdrive.NewServiceWithCtx(context.TODO())
@@ -347,7 +352,7 @@ func create_gs(sheet_name string, parent string) (string, error) {
 		return "", err
 	}
 
-	new_sheet, err := gdrive_srv.CreateFile(sheet_name, parent, r)
+	new_sheet, err := gdrive_srv.CreateFile(google_sheet_name, parent, r)
 	if err != nil {
 		return "", err
 	}
@@ -356,24 +361,39 @@ func create_gs(sheet_name string, parent string) (string, error) {
 }
 
 //func write_to_google_sheets creates a specified google sheet utilizing an existing csv file
-func write_to_google_sheet(csv_file string, sheet_name string, parent string, sheet_id string) error {
+func write_to_google_sheet(csv_file string, google_sheet_name string, parent string, sheet_id string) (*sheets.UpdateValuesResponse, error) {
+	var empty *sheets.UpdateValuesResponse
 
+	//create gsheet service
 	gsheet_srv, err := gsheets.NewServiceWithCtx(context.TODO())
 	if err != nil {
-		return err
+		return empty, err
+	}
+
+	default_string := make([][]string, 1)
+	default_string[0] = make([]string, 1)
+	default_string[0][0] = "Web-Burner Metrics from /home/kni/web-burner/collected-metrics"
+
+	response, err := gsheet_srv.UpdateRangeStrings(sheet_id, "A001", default_string)
+	log.Println(response)
+
+	//create new sheet
+	log.Println("Creating new sheet in " + google_sheet_name)
+	err = gsheet_srv.NewSheet(sheet_id, google_sheet_name)
+	if err != nil {
+		return empty, err
 	}
 
 	r, err := os.Open(csv_file)
 	if err != nil {
-		return err
+		return empty, err
 	}
 
-	resp, err := gsheet_srv.UpdateRangeCSV(sheet_id, "A001", r)
+	resp, err := gsheet_srv.UpdateRangeCSV(sheet_id, google_sheet_name, r)
 	if err != nil {
-		return err
+		return empty, err
 	}
-	log.Println("New google sheet id is:" + resp.SpreadsheetId)
-	return nil
+	return resp, nil
 }
 
 //func derefString removes the pointer to a string
