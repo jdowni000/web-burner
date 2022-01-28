@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -37,7 +38,7 @@ type PodLatencyStruct struct {
 }
 
 // Default strcut to use for json files
-type JsonStruct struct {
+type JsonStructValInt struct {
 	Timestamp  string `json:"timestamp"`
 	Labels     Inner  `json:"labels"`
 	Value      int    `json:"value"`
@@ -47,19 +48,20 @@ type JsonStruct struct {
 	JobName    string `json:"jobName"`
 }
 
+// Default strcut to use for json files
+type JsonStructValFloat struct {
+	Timestamp  string  `json:"timestamp"`
+	Labels     Inner   `json:"labels"`
+	Value      float64 `json:"value"`
+	UUID       string  `json:"uuid"`
+	Query      string  `json:"query"`
+	MetricName string  `json:"metricName"`
+	JobName    string  `json:"jobName"`
+}
+
 type Inner struct {
 	Node string `json:"instance"`
 }
-
-// type maxValue struct {
-// 	JobName    string
-// 	Node       string
-// 	MetricName string
-// 	Value      string
-// 	Timestamp  string
-// 	UUID       string
-// 	Query      string
-// }
 
 func init() {
 
@@ -98,9 +100,11 @@ func main() {
 	// //unmarshal json into csv file
 	struct_req := json_identifier(json_file_path)
 
-	//create csv file
+	//create csv file and write data
 	err = create_csv(wd, csv_file_name, json_file_path, struct_req)
 	error_check(err)
+
+	log.Println("Finished creating csv file with data from json file!")
 
 	// //create google sheet
 	// sheed_id, err := create_gs(google_sheet_name, google_parent_id)
@@ -121,7 +125,7 @@ func create_csv(wd string, csv_file_name string, json_file string, struct_req st
 		if err != nil {
 			return err
 		}
-		log.Println("Existing CSV file removed with the same name")
+		log.Println("Existing CSV file " + csv_file_name + " removed!")
 	}
 	//create csv file
 	file, err := os.Create(csv_file_name)
@@ -132,7 +136,7 @@ func create_csv(wd string, csv_file_name string, json_file string, struct_req st
 
 	w := csv.NewWriter(file)
 
-	log.Println("CSV file created")
+	log.Println("CSV file " + csv_file_name + " created")
 
 	log.Println("Begining to retrieve data from json file to write to CSV file")
 	err = json_to_csv(json_file, struct_req, w)
@@ -145,166 +149,166 @@ func create_csv(wd string, csv_file_name string, json_file string, struct_req st
 //func json_to_csv takes a json file and unmarshalls it to a defined csv file
 func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 
+	var jpl []PodLatencyStruct
+	var jint []JsonStructValInt
+	var jflt []JsonStructValFloat
+	var key string
+
+	//read data from json file
 	data, err := ioutil.ReadFile(json_file)
+	if err != nil {
+		return err
+	}
 
+	//unmarshal data by required struct
 	if struct_req == "pod_latency_struct" {
-		var pl []PodLatencyStruct
+		key = "pod_latency"
 		//unmarshal data
-		err := json.Unmarshal([]byte(json_file), &pl)
+		err := json.Unmarshal([]byte(data), &jpl)
 		if err != nil {
+			return err
 		}
-		return err
-
+	} else if struct_req == "json_struct_float64" {
+		key = "float"
+		//unmarshal data
+		err := json.Unmarshal([]byte(data), &jflt)
+		if err != nil {
+			return err
+		}
+	} else if struct_req == "json_struct_int" {
+		key = "int"
+		//unmarshal data
+		err := json.Unmarshal([]byte(data), &jint)
+		if err != nil {
+			return err
+		}
 	}
-	var js []JsonStruct
-	//unmarshal data
-	err = json.Unmarshal([]byte(data), &js)
-	if err != nil {
-		return err
+
+	//write header depending on struct
+	if key == "pod_latency" {
+		header := []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
+		w.Write(header)
+		w.Flush()
+	} else {
+		header := []string{"JobName", "Node", "MaxValue", "MetricName", "Timestamp", "UUID", "Query"}
+		w.Write(header)
+		w.Flush()
 	}
 
-	err = data_calc(js, w)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-//
-func data_calc(jstruct []JsonStruct, w *csv.Writer) error {
-
-	header := []string{"JobName", "Node", "MaxValue", "MetricName", "Timestamp", "UUID", "Query"}
-	w.Write(header)
-	w.Flush()
 	var all_job_names []string
 	var all_node_names []string
 
-	// var job_name []string
+	//retrieve all node and job namess
+	if key == "pod_latency" {
+		log.Println("Not ordering data by node by job for this type of csv file")
+	} else if key == "float" {
+		for _, all := range jflt {
+			if !(exists(all_job_names, all.JobName)) {
+				all_job_names = append(all_job_names, all.JobName)
+			}
+		}
 
-	for _, all := range jstruct {
-		if !(exists(all_job_names, all.JobName)) {
-			all_job_names = append(all_job_names, all.JobName)
+		for _, node := range jflt {
+			if !(exists(all_node_names, node.Labels.Node)) {
+				all_node_names = append(all_node_names, node.Labels.Node)
+			}
+		}
+	} else if key == "int" {
+		for _, all := range jint {
+			if !(exists(all_job_names, all.JobName)) {
+				all_job_names = append(all_job_names, all.JobName)
+			}
+		}
+
+		for _, node := range jint {
+			if !(exists(all_node_names, node.Labels.Node)) {
+				all_node_names = append(all_node_names, node.Labels.Node)
+			}
 		}
 	}
 
-	for _, node := range jstruct {
-		if !(exists(all_node_names, node.Labels.Node)) {
-			all_node_names = append(all_node_names, node.Labels.Node)
+	//run simple write to csv for podLatency
+	if key == "pod_latency" {
+		for _, o := range jpl {
+			var csvRow []string
+			csvRow = append(csvRow, o.QuantileName, o.UUID, strconv.Itoa(o.P99), strconv.Itoa(o.P95), strconv.Itoa(o.P50), strconv.Itoa(o.Max), strconv.Itoa(o.Avg), o.Timestamp, o.MetricName, o.JobName)
+			err := w.Write(csvRow)
+			if err != nil {
+				return err
+			}
 		}
+		w.Flush()
+		return nil
 	}
 
 	count_nodes := len(all_node_names)
-
 	n := 0
 
+	//Calculate max values by node by job and werite to csv
 	for n < count_nodes {
-
 		var jobs_by_node []string
 
-		for _, v := range jstruct {
-			if v.Labels.Node == all_node_names[n] && !(exists(jobs_by_node, v.JobName)) {
-				jobs_by_node = append(jobs_by_node, v.JobName)
-			}
-		}
-
-		var csv_row []string
-		num_jobs := len(jobs_by_node)
-		j := 0
-		max := 0
-
-		for j < num_jobs {
-			var temp []string
-			for _, v := range jstruct {
-				if v.Labels.Node == all_node_names[n] && v.JobName == jobs_by_node[j] {
-					if v.Value > max {
-						max = v.Value
-						temp = []string{v.JobName, v.Labels.Node, strconv.Itoa(v.Value), v.MetricName, v.Timestamp, v.UUID, v.Query}
-					}
+		if key == "float" {
+			for _, v := range jflt {
+				if v.Labels.Node == all_node_names[n] && !(exists(jobs_by_node, v.JobName)) {
+					jobs_by_node = append(jobs_by_node, v.JobName)
 				}
 			}
-			csv_row = temp
-			w.Write(csv_row)
-			w.Flush()
-			j++
+
+			var csv_row []string
+			num_jobs := len(jobs_by_node)
+			j := 0
+			var max float64
+			max = 0
+
+			for j < num_jobs {
+				var temp []string
+				for _, v := range jflt {
+					if v.Labels.Node == all_node_names[n] && v.JobName == jobs_by_node[j] {
+						if v.Value > max {
+							max = v.Value
+							temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
+						}
+					}
+				}
+				csv_row = temp
+				w.Write(csv_row)
+				w.Flush()
+				j++
+			}
+			n++
+		} else if key == "int" {
+			for _, v := range jint {
+				if v.Labels.Node == all_node_names[n] && !(exists(jobs_by_node, v.JobName)) {
+					jobs_by_node = append(jobs_by_node, v.JobName)
+				}
+			}
+
+			var csv_row []string
+			num_jobs := len(jobs_by_node)
+			j := 0
+			max := 0
+
+			for j < num_jobs {
+				var temp []string
+				for _, v := range jint {
+					if v.Labels.Node == all_node_names[n] && v.JobName == jobs_by_node[j] {
+						if v.Value > max {
+							max = v.Value
+							temp = []string{v.JobName, v.Labels.Node, strconv.Itoa(v.Value), v.MetricName, v.Timestamp, v.UUID, v.Query}
+						}
+					}
+				}
+				csv_row = temp
+				w.Write(csv_row)
+				w.Flush()
+				j++
+			}
+			n++
 		}
-		n++
 	}
 	return nil
 }
-
-// n := 0
-// j := 0
-// max := 0
-
-//if node name equals this
-//and job name equals this
-//find values
-//append csv_row
-//write row to csv
-
-// for n < count_nodes {
-// 	// var csv_row []string
-// 	var jobs_by_node []string
-// 	for _, n := range jstruct {
-// 		if n.Labels.Node == all_node_names[n] {
-// 			for
-// 		}
-// 	}
-
-// 	num_jobs := len(jobs_by_node)
-// 	log.Println(num_jobs)
-// 	log.Println(jobs_by_node)
-
-// i := 0
-// max := 0
-// for i < num_jobs {
-// 	for _, v := range jstruct {
-// 		if v.JobName == jobs_by_node[i] || v.Value > max {
-// 			max = v.Value
-// 			csv_row = append(csv_row, v.JobName, v.Labels.Node, strconv.Itoa(v.Value), v.MetricName, v.Timestamp, v.UUID, v.Query)
-// 		}
-// 		log.Println(csv_row)
-// 		w.Write(csv_row)
-// 		w.Flush()
-// 	}
-// 	i++
-// }
-
-// 	n++
-// 	w.Flush()
-// }
-
-// 	if v.Value > max {
-// 		max = v.Value
-// 		temp = []string{v.JobName, v.Labels.Node, strconv.Itoa(v.Value), v.MetricName, v.Timestamp, v.UUID, v.Query}
-// 	}
-// 	return nil
-// }
-
-// for j < count_jobs {
-
-// 	var temp_csv []string
-// 	for _, jn := range jstruct {
-// 		if jn.JobName == all_job_names[j] {
-// 			if jn.Value > max {
-// 				max = jn.Value
-// 				temp_csv = []string{jn.JobName, jn.Labels.Node, strconv.Itoa(jn.Value), jn.MetricName, jn.Timestamp, jn.UUID, jn.Query}
-// 			}
-// 		}
-// 	}
-// 	header := []string{"JobName", "Node", "MaxValue", "MetricName", "Timestamp", "UUID", "Query"}
-// 	err := w.Write(header)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = w.Write(temp_csv)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	max = 0
-
-// }
 
 //func exists checks if an element exists againnt an array
 func exists(a []string, element string) bool {
@@ -325,7 +329,12 @@ func json_identifier(json_file string) string {
 		json_struct_req = "pod_latency_struct"
 		return json_struct_req
 	}
-	json_struct_req = "json_struct"
+
+	if strings.Contains(json_file, "nodeCPU") {
+		json_struct_req = "json_struct_float64"
+		return json_struct_req
+	}
+	json_struct_req = "json_struct_int"
 	return json_struct_req
 }
 
