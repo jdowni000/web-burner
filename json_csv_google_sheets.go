@@ -20,8 +20,10 @@ import (
 
 var json_file_path string
 var csv_file_name string
-var google_sheet_name string
+var google_sheet_file_name string
 var google_parent_id string
+var new_gs_req bool
+var existing_sheet_id string
 
 // Struct specifically for Pod Latency summary json files
 type PodLatencyStruct struct {
@@ -65,63 +67,85 @@ type Inner struct {
 
 func init() {
 
-	j := flag.String("j", "", "path to json file")
-	c := flag.String("c", "", "csv file name")
-	g := flag.String("g", "", "google sheet name")
-	p := flag.String("p", "", "google sheet parent id")
+	j := flag.String("json", "", "path to json file")
+	c := flag.String("csv", "output.csv", "csv file name")
+	g := flag.String("gs", "web-burner output", "google sheet name")
+	p := flag.String("parent", "", "google sheet parent id")
+	n := flag.Bool("new", true, "This bool request for a new google sheet to be made")
+	s := flag.String("sheetid", "", "Google Sheet ID if new google sheet is not requested using flag '-n' and has been set to false")
 	flag.Parse()
 
 	json_file_path = derefString(j)
 	csv_file_name = derefString(c)
-	google_sheet_name = derefString(g)
+	google_sheet_file_name = derefString(g)
 	google_parent_id = derefString(p)
+	existing_sheet_id = derefString(s)
+	new_gs_req = *n
 
 	if json_file_path == "" {
 		log.Fatal("Please provide path to json file requested using flag '-j'")
 	}
 	if csv_file_name == "" {
-		log.Fatal("Please provide file name for csv file using flag '-c'")
+		log.Println("No file name provided for the csv file using flag '-c', using default value output.csv")
+
 	}
-	if google_sheet_name == "" {
-		log.Fatal("Please provide a name for the requested new google sheet file using flag '-g'")
+	if !(check_suffix(csv_file_name)) {
+		log.Println("No csv filename extenstion found in provided csv filename, adding extension to requested csv filename")
+		csv_file_name = csv_file_name + ".csv"
+	}
+	if google_sheet_file_name == "" {
+		log.Println("No name for google sheet provided using '-g', providing default google sheet 'web-burner output'")
+	}
+	if !(check_suffix(google_sheet_file_name)) {
+		log.Println("No csv filename extenstion found in provided google sheet filename, adding extension to requested google sheet filename")
+		google_sheet_file_name = google_sheet_file_name + ".csv"
 	}
 	if google_parent_id == "" {
 		log.Fatal("Please provide the new google sheets parent folder id using flag '-p'")
+	}
+	if new_gs_req == false && existing_sheet_id == "" {
+		log.Fatal("New Google Sheet has been set to false with the '-n' flag, but no exisiting Google Sheet ID has been provided with 's' flag")
 	}
 
 }
 
 func main() {
 
-	//Determine present working directory
+	// Determine present working directory
 	wd, err := os.Getwd()
 	error_check(err)
 
-	// //unmarshal json into csv file
+	// Determine which struct to use for unmarshalling json
 	struct_req := json_identifier(json_file_path)
 
-	//create csv file and write data
-	csv_file_name = csv_file_name + ".csv"
+	// Create csv file and write data from json file
 	err = create_csv(wd, csv_file_name, json_file_path, struct_req)
 	error_check(err)
 	log.Println("Finished creating csv file with data from json file!")
 
-	// //create google sheet
-	google_sheet_name = google_sheet_name + ".csv"
-	log.Println("Creating new google sheet named " + google_sheet_name)
-	sheed_id, err := create_gs(google_sheet_name, google_parent_id)
-	error_check(err)
-	log.Println("Google sheet " + google_sheet_name + " created with id " + sheed_id)
+	// Create google sheet file if requested or add to an existing file with new sheet
+	if new_gs_req {
+		log.Println("Creating new google sheet named " + google_sheet_file_name)
+		sheet_id, err := create_gs(google_sheet_file_name, google_parent_id)
+		error_check(err)
+		log.Println("Google sheet " + google_sheet_file_name + " created with id " + sheet_id)
 
-	//upload csv to google sheets
-	resp, err := write_to_google_sheet(csv_file_name, google_sheet_name, google_parent_id, sheed_id)
-	error_check(err)
-	log.Println("Finished writing to google sheet " + google_sheet_name + " with sheet id " + resp.SpreadsheetId)
+		// Upload csv to google sheets
+		resp, err := write_to_google_sheet(csv_file_name, google_parent_id, sheet_id, new_gs_req)
+		error_check(err)
+		log.Println("Finished writing to google sheet " + google_sheet_file_name + " with sheet id " + resp.SpreadsheetId)
+	} else {
+		// Upload csv to google sheets
+		resp, err := write_to_google_sheet(csv_file_name, google_parent_id, existing_sheet_id, new_gs_req)
+		error_check(err)
+		log.Println("Finished writing to google sheet " + google_sheet_file_name + " with sheet id " + resp.SpreadsheetId)
+	}
+
 }
 
-//func create_csv creates a csv file
+// Func create_csv creates a csv file
 func create_csv(wd string, csv_file_name string, json_file string, struct_req string) error {
-	//Delete csv file if it exists
+	// Delete csv file if it exists
 	_, err := os.Stat(wd + "/" + csv_file_name)
 	if err == nil {
 		log.Println("CSV filename " + csv_file_name + " already exists: Removing existing file before proceeding!")
@@ -131,7 +155,7 @@ func create_csv(wd string, csv_file_name string, json_file string, struct_req st
 		}
 		log.Println("Existing CSV file " + csv_file_name + " removed!")
 	}
-	//create csv file
+	// Create csv file
 	file, err := os.Create(csv_file_name)
 	if err != nil {
 		return err
@@ -150,7 +174,7 @@ func create_csv(wd string, csv_file_name string, json_file string, struct_req st
 	return nil
 }
 
-//func json_to_csv takes a json file and unmarshalls it to a defined csv file
+// Func json_to_csv takes a json file and unmarshalls it to be written to a csv file
 func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 
 	var jpl []PodLatencyStruct
@@ -158,37 +182,37 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	var jflt []JsonStructValFloat
 	var key string
 
-	//read data from json file
+	// Read data from json file
 	data, err := ioutil.ReadFile(json_file)
 	if err != nil {
 		return err
 	}
 
-	//unmarshal data by required struct
+	// Unmarshal data by required struct
 	if struct_req == "pod_latency_struct" {
 		key = "pod_latency"
-		//unmarshal data
+		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jpl)
 		if err != nil {
 			return err
 		}
 	} else if struct_req == "json_struct_float64" {
 		key = "float"
-		//unmarshal data
+		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jflt)
 		if err != nil {
 			return err
 		}
 	} else if struct_req == "json_struct_int" {
 		key = "int"
-		//unmarshal data
+		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jint)
 		if err != nil {
 			return err
 		} else {
-			//default key and struct
+			// Default key and struct
 			key = "int"
-			//unmarshal data
+			// Unmarshal data
 			err := json.Unmarshal([]byte(data), &jint)
 			if err != nil {
 				return err
@@ -196,7 +220,7 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 		}
 	}
 
-	//write header depending on struct
+	// Write header depending on struct
 	if key == "pod_latency" {
 		header := []string{"quantileName", "uuid", "p99", "p95", "p50", "max", "avg", "timestamp", "metricName", "jobName"}
 		w.Write(header)
@@ -210,7 +234,7 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	var all_job_names []string
 	var all_node_names []string
 
-	//retrieve all node and job namess
+	// Retrieve all node and job namess
 	if key == "pod_latency" {
 		log.Println("Not ordering data by node by job for this type of csv file")
 	} else if key == "float" {
@@ -239,7 +263,7 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 		}
 	}
 
-	//run simple write to csv for podLatency
+	// Run simple write to csv for podLatency
 	if key == "pod_latency" {
 		for _, o := range jpl {
 			var csvRow []string
@@ -256,7 +280,7 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	count_nodes := len(all_node_names)
 	n := 0
 
-	//Calculate max values by node by job and werite to csv
+	// Calculate max values by node by job and werite to csv
 	for n < count_nodes {
 		var jobs_by_node []string
 
@@ -322,7 +346,7 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	return nil
 }
 
-//func exists checks if an element exists againnt an array
+// Func exists checks if an element exists againnt an array
 func exists(a []string, element string) bool {
 	for _, e := range a {
 		if e == element {
@@ -332,7 +356,7 @@ func exists(a []string, element string) bool {
 	return false
 }
 
-//func json_identifier determines what json file is being used to pass in correct struct for unmarsahlling
+// Func json_identifier determines what json file is being used to pass in correct struct for unmarsahlling
 func json_identifier(json_file string) string {
 
 	var json_struct_req string
@@ -350,8 +374,8 @@ func json_identifier(json_file string) string {
 	return json_struct_req
 }
 
-//func create_gs creates a new google spreadsheet
-func create_gs(google_sheet_name string, parent string) (string, error) {
+// Func create_gs creates a new google spreadsheet
+func create_gs(google_sheet_file_name string, parent string) (string, error) {
 	var r io.Reader
 
 	gdrive_srv, err := gdrive.NewServiceWithCtx(context.TODO())
@@ -359,7 +383,7 @@ func create_gs(google_sheet_name string, parent string) (string, error) {
 		return "", err
 	}
 
-	new_sheet, err := gdrive_srv.CreateFile(google_sheet_name, parent, r)
+	new_sheet, err := gdrive_srv.CreateFile(google_sheet_file_name, parent, r)
 	if err != nil {
 		return "", err
 	}
@@ -367,26 +391,32 @@ func create_gs(google_sheet_name string, parent string) (string, error) {
 	return new_sheet.Id, nil
 }
 
-//func write_to_google_sheets creates a specified google sheet utilizing an existing csv file
-func write_to_google_sheet(csv_file string, google_sheet_name string, parent string, sheet_id string) (*sheets.UpdateValuesResponse, error) {
+// Func write_to_google_sheets creates a specified google sheet utilizing an existing csv file
+func write_to_google_sheet(csv_file string, parent string, sheet_id string, new_gs_req bool) (*sheets.UpdateValuesResponse, error) {
 	var empty *sheets.UpdateValuesResponse
+	new_sheet_name := csv_file
 
-	//create gsheet service
+	// Create gsheet service
 	gsheet_srv, err := gsheets.NewServiceWithCtx(context.TODO())
 	if err != nil {
 		return empty, err
 	}
 
-	default_string := make([][]string, 1)
-	default_string[0] = make([]string, 1)
-	default_string[0][0] = "Web-Burner Metrics from /home/kni/web-burner/collected-metrics"
+	if new_gs_req {
+		default_string := make([][]string, 1)
+		default_string[0] = make([]string, 1)
+		default_string[0][0] = "Web-Burner Metrics from /home/kni/web-burner/collected-metrics"
 
-	response, err := gsheet_srv.UpdateRangeStrings(sheet_id, "A001", default_string)
-	log.Println("Response from updating Sheet1: ", response)
+		response, err := gsheet_srv.UpdateRangeStrings(sheet_id, "A001", default_string)
+		if err != nil {
+			return empty, err
+		}
+		log.Println("Response from updating Sheet1: ", response)
+	}
 
-	//create new sheet
-	log.Println("Creating new sheet in " + google_sheet_name)
-	err = gsheet_srv.NewSheet(sheet_id, google_sheet_name)
+	// Create new sheet
+	log.Println("Creating new sheet named " + new_sheet_name + " in google sheed id " + sheet_id)
+	err = gsheet_srv.NewSheet(sheet_id, new_sheet_name)
 	if err != nil {
 		return empty, err
 	}
@@ -397,7 +427,7 @@ func write_to_google_sheet(csv_file string, google_sheet_name string, parent str
 	}
 
 	log.Println("Attempting to write CSV file", csv_file, "to new sheet")
-	resp, err := gsheet_srv.UpdateRangeCSV(sheet_id, google_sheet_name, r)
+	resp, err := gsheet_srv.UpdateRangeCSV(sheet_id, new_sheet_name, r)
 	if err != nil {
 		return empty, err
 	}
@@ -405,7 +435,7 @@ func write_to_google_sheet(csv_file string, google_sheet_name string, parent str
 	return resp, nil
 }
 
-//func derefString removes the pointer to a string
+// Func derefString removes the pointer to a string
 func derefString(s *string) string {
 	if s != nil {
 		return *s
@@ -414,9 +444,15 @@ func derefString(s *string) string {
 	return ""
 }
 
-//func error checks error and exits if is not empty
+// Func error checks error and exits if is not empty
 func error_check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// Func check_suffix checks if csv file name has .csv extension and returns bool
+func check_suffix(s string) bool {
+	resp := strings.HasSuffix(s, ".csv")
+	return resp
 }
