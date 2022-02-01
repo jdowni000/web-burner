@@ -25,7 +25,7 @@ var google_parent_id string
 var new_gs_req bool
 var existing_sheet_id string
 
-// Struct specifically for Pod Latency summary json files
+// Struct for Pod Latency summary json files
 type PodLatencyStruct struct {
 	QuantileName string `json:"quantileName"`
 	UUID         string `json:"uid"`
@@ -41,8 +41,10 @@ type PodLatencyStruct struct {
 
 // Default strcut to use for json files
 type JsonStructValInt struct {
-	Timestamp  string `json:"timestamp"`
-	Labels     Inner  `json:"labels"`
+	Timestamp string `json:"timestamp"`
+	Labels    struct {
+		Node string `json:"instance"`
+	} `json:"labels"`
 	Value      int    `json:"value"`
 	UUID       string `json:"uuid"`
 	Query      string `json:"query"`
@@ -50,10 +52,12 @@ type JsonStructValInt struct {
 	JobName    string `json:"jobName"`
 }
 
-// Default strcut to use for json files
-type JsonStructValFloat struct {
-	Timestamp  string  `json:"timestamp"`
-	Labels     Inner   `json:"labels"`
+// Struct for Json files that have a value that is a float and a label.instance key
+type JsonStructValFloatInstance struct {
+	Timestamp string `json:"timestamp"`
+	Labels    struct {
+		Node string `json:"instance"`
+	} `json:"labels"`
 	Value      float64 `json:"value"`
 	UUID       string  `json:"uuid"`
 	Query      string  `json:"query"`
@@ -61,8 +65,17 @@ type JsonStructValFloat struct {
 	JobName    string  `json:"jobName"`
 }
 
-type Inner struct {
-	Node string `json:"instance"`
+// Struct for Json files that have a value that is a float and a label.node key
+type JsonStructValFloatNode struct {
+	Timestamp string `json:"timestamp"`
+	Labels    struct {
+		Node string `json:"node"`
+	} `json:"labels"`
+	Value      float64 `json:"value"`
+	UUID       string  `json:"uuid"`
+	Query      string  `json:"query"`
+	MetricName string  `json:"metricName"`
+	JobName    string  `json:"jobName"`
 }
 
 func init() {
@@ -179,7 +192,8 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 
 	var jpl []PodLatencyStruct
 	var jint []JsonStructValInt
-	var jflt []JsonStructValFloat
+	var jfi []JsonStructValFloatInstance
+	var jfn []JsonStructValFloatNode
 	var key string
 
 	// Read data from json file
@@ -196,10 +210,17 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 		if err != nil {
 			return err
 		}
-	} else if struct_req == "json_struct_float64" {
-		key = "float"
+	} else if struct_req == "json_struct_float64_instance" {
+		key = "float_instance"
 		// Unmarshal data
-		err := json.Unmarshal([]byte(data), &jflt)
+		err := json.Unmarshal([]byte(data), &jfi)
+		if err != nil {
+			return err
+		}
+	} else if struct_req == "json_struct_float64_node" {
+		key = "float_node"
+		// Unmarshal data
+		err := json.Unmarshal([]byte(data), &jfn)
 		if err != nil {
 			return err
 		}
@@ -209,14 +230,14 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 		err := json.Unmarshal([]byte(data), &jint)
 		if err != nil {
 			return err
-		} else {
-			// Default key and struct
-			key = "int"
-			// Unmarshal data
-			err := json.Unmarshal([]byte(data), &jint)
-			if err != nil {
-				return err
-			}
+		}
+	} else {
+		// Default key and struct
+		key = "int"
+		// Unmarshal data
+		err := json.Unmarshal([]byte(data), &jint)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -237,14 +258,26 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	// Retrieve all node and job namess
 	if key == "pod_latency" {
 		log.Println("Not ordering data by node by job for this type of csv file")
-	} else if key == "float" {
-		for _, all := range jflt {
+	} else if key == "float_instance" {
+		for _, all := range jfi {
 			if !(exists(all_job_names, all.JobName)) {
 				all_job_names = append(all_job_names, all.JobName)
 			}
 		}
 
-		for _, node := range jflt {
+		for _, node := range jfi {
+			if !(exists(all_node_names, node.Labels.Node)) {
+				all_node_names = append(all_node_names, node.Labels.Node)
+			}
+		}
+	} else if key == "float_node" {
+		for _, all := range jfn {
+			if !(exists(all_job_names, all.JobName)) {
+				all_job_names = append(all_job_names, all.JobName)
+			}
+		}
+
+		for _, node := range jfn {
 			if !(exists(all_node_names, node.Labels.Node)) {
 				all_node_names = append(all_node_names, node.Labels.Node)
 			}
@@ -284,8 +317,8 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	for n < count_nodes {
 		var jobs_by_node []string
 
-		if key == "float" {
-			for _, v := range jflt {
+		if key == "float_instance" {
+			for _, v := range jfi {
 				if v.Labels.Node == all_node_names[n] && !(exists(jobs_by_node, v.JobName)) {
 					jobs_by_node = append(jobs_by_node, v.JobName)
 				}
@@ -299,7 +332,36 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 
 			for j < num_jobs {
 				var temp []string
-				for _, v := range jflt {
+				for _, v := range jfi {
+					if v.Labels.Node == all_node_names[n] && v.JobName == jobs_by_node[j] {
+						if v.Value > max {
+							max = v.Value
+							temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
+						}
+					}
+				}
+				csv_row = temp
+				w.Write(csv_row)
+				w.Flush()
+				j++
+			}
+			n++
+		} else if key == "float_node" {
+			for _, v := range jfn {
+				if v.Labels.Node == all_node_names[n] && !(exists(jobs_by_node, v.JobName)) {
+					jobs_by_node = append(jobs_by_node, v.JobName)
+				}
+			}
+
+			var csv_row []string
+			num_jobs := len(jobs_by_node)
+			j := 0
+			var max float64
+			max = 0
+
+			for j < num_jobs {
+				var temp []string
+				for _, v := range jfn {
 					if v.Labels.Node == all_node_names[n] && v.JobName == jobs_by_node[j] {
 						if v.Value > max {
 							max = v.Value
@@ -346,28 +408,23 @@ func json_to_csv(json_file string, struct_req string, w *csv.Writer) error {
 	return nil
 }
 
-// Func exists checks if an element exists againnt an array
-func exists(a []string, element string) bool {
-	for _, e := range a {
-		if e == element {
-			return true
-		}
-	}
-	return false
-}
-
 // Func json_identifier determines what json file is being used to pass in correct struct for unmarsahlling
 func json_identifier(json_file string) string {
 
 	var json_struct_req string
 
-	if strings.Contains(json_file, "job-podLatency-summary.json") {
+	if strings.Contains(json_file, "job-podLatency") {
 		json_struct_req = "pod_latency_struct"
 		return json_struct_req
 	}
 
 	if strings.Contains(json_file, "nodeCPU") {
-		json_struct_req = "json_struct_float64"
+		json_struct_req = "json_struct_float64_instance"
+		return json_struct_req
+	}
+
+	if strings.Contains(json_file, "kubeletCPU") || strings.Contains(json_file, "kubeletMemory") {
+		json_struct_req = "json_struct_float64_node"
 		return json_struct_req
 	}
 	json_struct_req = "json_struct_int"
@@ -442,6 +499,16 @@ func derefString(s *string) string {
 	}
 
 	return ""
+}
+
+// Func exists checks if an element exists againnt an array
+func exists(a []string, element string) bool {
+	for _, e := range a {
+		if e == element {
+			return true
+		}
+	}
+	return false
 }
 
 // Func error checks error and exits if is not empty
