@@ -100,7 +100,7 @@ func summary_page(wd string, json_files []string, uuid string) error {
 
 	w := csv.NewWriter(file)
 
-	sum_table := []string{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "crio"}
+	sum_table := []string{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}
 	err = w.Write(sum_table)
 	if err != nil {
 		log.Fatal(err)
@@ -137,12 +137,16 @@ func summary_page(wd string, json_files []string, uuid string) error {
 		if resp[0] == "kubeletMemory" {
 			m["KubeletMemory"] = resp[1]
 		}
-		if resp[0] == "crio" {
-			m["Crio"] = resp[1]
+		if resp[0] == "crioCPU" {
+			m["CrioCPU"] = resp[1]
+		}
+		if resp[0] == "crioMemory" {
+			m["CrioMemory"] = resp[1]
 		}
 		i++
 	}
-	csv_row := []string{"", "", uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["Crio"]}
+	log.Println(m)
+	csv_row := []string{"", "", "", uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"]}
 	err = w.Write(csv_row)
 	if err != nil {
 		log.Fatal(err)
@@ -279,6 +283,17 @@ func summary_data(json_file string) ([]string, error) {
 			}
 
 		}
+	} else if key == "crioMemory" {
+		var max int
+		max = 0
+		for _, v := range jint {
+			if v.Value > max {
+				max = v.Value
+				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
+				column = []string{"crioMemory", strconv.Itoa(v.Value)}
+			}
+
+		}
 	} else if key == "default" {
 		var max int
 		max = 0
@@ -369,6 +384,11 @@ func json_identifier(json_file string) (string, string) {
 	if strings.Contains(json_file, "crioCPU") {
 		json_struct_req = "json_struct_float64_node"
 		key = "crioCPU"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "crioMemory") {
+		json_struct_req = "json_struct_int"
+		key = "crioMemory"
 		return json_struct_req, key
 	}
 
