@@ -65,34 +65,33 @@ type JsonStructValFloatNode struct {
 	JobName    string  `json:"jobName"`
 }
 
-// Func summary_page creates a csv file in the working directory
-func summary_page(wd string, json_files []string, uuid string) error {
+// Func csv_create creates a csv file
+func csv_create(file_name string) error {
+	// Create csv file
+	_, err := os.Create(file_name)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+//
+func csv_file(wd string, json_files []string, uuid string, file_name string, sheetid string) error {
 
 	m := make(map[string]string)
+	f := strings.TrimSpace(wd + "/gsheet/" + file_name)
 
-	// Iteration     string
-	// Start_Time    string
-	// End_Time      string
-	// UUID          string
-	// NodeCPU       int
-	// NodeMemory    int
-	// KubeletMemory int
-	// KubeletCPU    int
-	// Crio          int
-
-	// Delete Summary Page csv file if it exists
-	_, err := os.Stat(wd + "/" + "Summary_Page.csv")
-	if err == nil {
-		log.Println("CSV filename Summary_Page.csv already exists: Removing existing file before proceeding!")
-		err = os.Remove("Summary_Page.csv")
+	if sheetid == "" {
+		//create csv
+		log.Println("No Previous files detected, creating new csv file", f)
+		err := csv_create(f)
 		if err != nil {
 			return err
 		}
-		log.Println("Existing CSV file Summary_Page.csv removed!")
 	}
 
-	// Create csv file
-	file, err := os.Create("Summary_Page.csv")
+	// open csv
+	file, err := os.OpenFile(f, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	if err != nil {
 		return err
 	}
@@ -100,12 +99,15 @@ func summary_page(wd string, json_files []string, uuid string) error {
 
 	w := csv.NewWriter(file)
 
-	sum_table := []string{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}
-	err = w.Write(sum_table)
-	if err != nil {
-		log.Fatal(err)
+	if sheetid == "" {
+		log.Println("attempting to write to file here")
+		sum_table := []string{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}
+		err = w.Write(sum_table)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w.Flush()
 	}
-	w.Flush()
 
 	length := len(json_files)
 	i := 0
@@ -308,37 +310,6 @@ func summary_data(json_file string) ([]string, error) {
 	}
 	return column, nil
 }
-
-// // Func create_csv creates a csv file
-// func create_csv(wd string, csv_file_name string, json_file string, key string, struct_req string) error {
-// 	// Delete csv file if it exists
-// 	_, err := os.Stat(wd + "/" + csv_file_name)
-// 	if err == nil {
-// 		log.Println("CSV filename " + csv_file_name + " already exists: Removing existing file before proceeding!")
-// 		err = os.Remove(csv_file_name)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		log.Println("Existing CSV file " + csv_file_name + " removed!")
-// 	}
-// 	// Create csv file
-// 	file, err := os.Create(csv_file_name)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer file.Close()
-
-// 	w := csv.NewWriter(file)
-
-// 	log.Println("CSV file " + csv_file_name + " created")
-
-// 	log.Println("Begining to retrieve data from json file to write to CSV file")
-// 	err = json_to_csv(json_file, struct_req, w)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
 
 // Func json_identifier determines what json file is being used to pass in correct struct for unmarsahlling
 func json_identifier(json_file string) (string, string) {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -12,13 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cristoper/gsheet/gdrive"
 	"github.com/cristoper/gsheet/gsheets"
 	"google.golang.org/api/sheets/v4"
 )
 
 var uuid string
 var google_parent_id string
+var google_sheet_file_name string
+var google_sheet_id string
 
 func init() {
 
@@ -40,30 +40,28 @@ func init() {
 
 func main() {
 
-	uuid = "55332edc-8e4a-409c-8f51-a0e14901f99e"
-
 	// Determine present working directory
+	log.Println("Determing pwd")
 	wd, err := os.Getwd()
 	error_check(err)
 
-	// Determine Date to check for exisitng google sheet or create one with date as title
+	// Determine Date and set to var for file names
+	log.Println("Calculating date for csv file anme")
 	year, month, day := time.Now().Date()
-	gs_id_store := strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".txt"
-	google_sheet_file_name := strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".csv"
+	gs_id_store := "Sheetid-" + strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".txt"
+	google_sheet_file_name = strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".csv"
 
-	// Check for existing google sheet or create a new one
+	// Check for existing google sheet
+	log.Println("Determining if google sheet id exists already from previous runs today to append to")
+	google_sheet_id, err = retrieve_sheetid(wd, gs_id_store, google_sheet_file_name)
+	error_check(err)
 
 	// Retrieve json files
 	json_files := retrieve_json_files(uuid)
 	log.Println("Files found:", json_files)
-	google_sheet_id, err := sheetid_gen_retrieve(wd, gs_id_store, google_sheet_file_name)
-	error_check(err)
-	log.Println("Google Sheet id is " + google_sheet_id)
 
-	// Unmarshall json data
-
-	// Create Summary_Page.csv
-	err = summary_page(wd, json_files, uuid)
+	// Unmarshall json data and write to csv file
+	err = csv_file(wd, json_files, uuid, google_sheet_file_name, google_sheet_id)
 	error_check(err)
 	// Populate Data for Summary_Page.csv
 
@@ -73,6 +71,7 @@ func main() {
 
 }
 
+// Func check_file_exists checks to see if file exists and returns bool
 func check_file_exists(wd string, file string) bool {
 	// Delete Summary Page csv file if it exists
 	_, err := os.Stat(wd + "/" + file)
@@ -81,8 +80,50 @@ func check_file_exists(wd string, file string) bool {
 	}
 	return false
 }
-func sheetid_gen_retrieve(wd string, gs_id_store string, google_sheet_file_name string) (string, error) {
-	if check_file_exists(wd, "/temp/"+gs_id_store) {
+
+// Func retrieve_gsheet retrieves csv data from google sheet
+func retrieve_gsheet(wd string, sheetid string, file_name string) error {
+	f := wd + "/gsheet/" + file_name
+
+	// Delete csv file if it exists with old data
+	log.Println("Checking for exisitng csv file with the same name and removing to create a new one with up to date information")
+	_, err := os.Stat(f)
+	if err == nil {
+		log.Println("CSV filename " + file_name + " already exists: Removing existing file before proceeding!")
+		err = os.Remove(f)
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Println("Creating new csv file " + file_name)
+	err = csv_create(f)
+	if err != nil {
+		return err
+	}
+
+	log.Println("Writing retrieved information from google sheet to append to new csv file")
+	// Open csv file
+	cmd := "gsheet csv --id " + sheetid + " --range 'Sheet1' > " + f
+	_, err = exec.Command("bash", "-c", cmd).Output()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Func retrieve_sheetid checks to see if there is an existing sheet to use and creates a google sheet if necessary
+func retrieve_sheetid(wd string, gs_id_store string, file_name string) (string, error) {
+	// Create temp dir if it has not been created
+	if !(check_file_exists(wd, "/gsheet")) {
+		log.Println("No temp dir found, creating temp dir for future sheetid files")
+		_, err := exec.Command("bash", "-c", "mkdir temp").Output()
+		if err != nil {
+			return "", err
+		}
+	}
+	// Check to see if txt file for today exists with sheet id from a previous run
+	if check_file_exists(wd, "/gsheet/"+gs_id_store) {
 		// Return google sheet id
 		log.Println("Google Sheet already exists, retrieving sheet id!")
 		cmd := "cat temp/" + gs_id_store
@@ -90,30 +131,29 @@ func sheetid_gen_retrieve(wd string, gs_id_store string, google_sheet_file_name 
 		if err != nil {
 			return "", err
 		}
-		google_sheet_id := string(out)
-		return google_sheet_id, nil
-	}
-	// Create google sheet and return sheet id
-	google_sheet_id, err := create_gs(google_sheet_file_name, google_parent_id)
-	if err != nil {
-		return "", err
-	}
-	// Create temp dir if it has not been created
-	if !(check_file_exists(wd, "/temp")) {
-		log.Println("No temp dir found, creating temp dir")
-		_, err = exec.Command("bash", "-c", "mkdir temp").Output()
+		sheetid := string(out)
+		err = retrieve_gsheet(wd, sheetid, file_name)
 		if err != nil {
 			return "", err
 		}
+		return sheetid, nil
 	}
-	// Create txt file that holds sheet id for today
-	cmd := "echo " + google_sheet_id + " > temp/" + gs_id_store
-	_, err = exec.Command("bash", "-c", cmd).Output()
-	if err != nil {
-		return "", err
-	}
-	return google_sheet_id, nil
+	// Create google sheet and return sheet id
+	log.Println("No sheet id found, will create new google sheet when uploading!")
+	return "", nil
 }
+
+// google_sheet_id, err := create_gs(google_sheet_file_name, google_parent_id)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	// Create txt file that holds sheet id for today
+// 	cmd := "echo " + google_sheet_id + " > gsheeet/" + gs_id_store
+// 	_, err = exec.Command("bash", "-c", cmd).Output()
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	return google_sheet_id, nil
 
 // Func retrieve_json_files iterates over collected-metrics directory looking for json files that match uuid
 func retrieve_json_files(uuid string) []string {
@@ -134,27 +174,23 @@ func retrieve_json_files(uuid string) []string {
 	return json_fies
 }
 
-func check_existing_google_sheet() {
+// // Func create_gs creates a new google spreadsheet
+// func create_gs(google_sheet_file_name string, parent string) (string, error) {
 
-}
+// 	var r io.Reader
 
-// Func create_gs creates a new google spreadsheet
-func create_gs(google_sheet_file_name string, parent string) (string, error) {
+// 	gdrive_srv, err := gdrive.NewServiceWithCtx(context.TODO())
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	var r io.Reader
+// 	new_sheet, err := gdrive_srv.CreateFile(google_sheet_file_name, parent, r)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	gdrive_srv, err := gdrive.NewServiceWithCtx(context.TODO())
-	if err != nil {
-		return "", err
-	}
-
-	new_sheet, err := gdrive_srv.CreateFile(google_sheet_file_name, parent, r)
-	if err != nil {
-		return "", err
-	}
-
-	return new_sheet.Id, nil
-}
+// 	return new_sheet.Id, nil
+// }
 
 // Func write_to_google_sheets creates a specified google sheet utilizing an existing csv file
 func write_to_google_sheet(csv_file string, parent string, sheet_id string, new_gs_req bool) (*sheets.UpdateValuesResponse, error) {
