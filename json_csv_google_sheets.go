@@ -41,27 +41,30 @@ func init() {
 func main() {
 
 	// Determine present working directory
-	log.Println("Determing pwd")
 	wd, err := os.Getwd()
 	error_check(err)
 
 	// Determine Date and set to var for file names
-	log.Println("Calculating date for csv file anme")
 	year, month, day := time.Now().Date()
 	store_sheetid := "Sheetid-" + strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".txt"
+	iteration_count := "iteration_count-" + strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".txt"
 	google_sheet_file_name = strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".csv"
 
 	// Check for existing google sheet and write to local csv if it exists
 	log.Println("Determining if google sheet id exists already from previous runs today to append to")
 	google_sheet_id, err = retrieve_sheetid(wd, store_sheetid, google_sheet_file_name)
 	error_check(err)
+	// Check for iteration count
+	iteration, err := iteration(wd, iteration_count)
+	error_check(err)
+	log.Println(iteration)
 
 	// Retrieve json files
 	json_files := retrieve_json_files(uuid)
-	log.Println("Files found:", json_files)
+	log.Println("Found", len(json_files), " files with uuid", uuid)
 
 	// Unmarshall json data and write to csv file
-	err = csv_file(wd, json_files, uuid, google_sheet_file_name, google_sheet_id)
+	err = csv_file(wd, json_files, uuid, google_sheet_file_name, google_sheet_id, iteration)
 	error_check(err)
 
 	// Upload csv file
@@ -73,8 +76,8 @@ func main() {
 func retrieve_sheetid(wd string, store_sheetid string, file_name string) (string, error) {
 	// Create temp dir if it has not been created
 	if !(check_file_exists(wd, "/gsheet")) {
-		log.Println("No temp dir found, creating temp dir for future sheetid files")
-		_, err := exec.Command("bash", "-c", "mkdir temp").Output()
+		log.Println("No gsheet dir found, creating temp dir for future sheetid files")
+		_, err := exec.Command("bash", "-c", "mkdir gsheet").Output()
 		if err != nil {
 			return "", err
 		}
@@ -125,12 +128,44 @@ func gsheet_csv(wd string, sheetid string, file_name string) error {
 	log.Println("Writing retrieved information from google sheet to append to new csv file")
 	// Wrtie data from sheet id csv file to local new csv file
 	cmd := "gsheet csv --id " + sheetid + " --range \"Sheet1\" > " + f
-	log.Println(cmd)
 	_, err = exec.Command("bash", "-c", cmd).Output()
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// Func iteration finds or creates the iteration count
+func iteration(wd, iteration_file string) (string, error) {
+	f := "/gsheet/" + iteration_file
+	if !(check_file_exists(wd, f)) {
+		log.Println("No " + iteration_file + " file found. Setting iteration to iteration_1 and creating file " + iteration_file)
+		cmd := "echo iteration_1 > " + "gsheet/" + iteration_file
+		_, err := exec.Command("bash", "-c", cmd).Output()
+		if err != nil {
+			return "", err
+		}
+		return "iteration_1", nil
+	}
+	log.Println(iteration_file + " found, retrieving iteration number to incrememnt!")
+	cmd := "cat " + "gsheet/" + iteration_file
+	out, err := exec.Command("bash", "-c", cmd).Output()
+	if err != nil {
+		return "", err
+	}
+	s := string(out)
+	s_trim := strings.TrimSuffix(s, "\n")
+	new_incrememnt, err := increment_iteration(s_trim)
+	if err != nil {
+		return "", err
+	}
+	cmd = "echo " + new_incrememnt + " > " + "gsheet/" + iteration_file
+	_, err = exec.Command("bash", "-c", cmd).Output()
+	if err != nil {
+		return "", err
+	}
+
+	return new_incrememnt, nil
 }
 
 // Func retrieve_json_files iterates over collected-metrics directory looking for json files that match uuid
@@ -244,4 +279,19 @@ func create_sheet_tab_name(j string) string {
 	name := strings.TrimSuffix(json_file, filepath.Ext(json_file))
 	name = name + ".csv"
 	return name
+}
+
+// Func increment_iteration reads the iteration and increments by one
+func increment_iteration(iteration string) (string, error) {
+	s := strings.Split(iteration, "_")
+	iteration_count := s[1]
+	int_val, err := strconv.Atoi(iteration_count)
+	if err != nil {
+		return "", err
+	}
+	int_val++
+	string := strconv.Itoa(int_val)
+	new_iteration := "iteration_" + string
+	return new_iteration, nil
+
 }
