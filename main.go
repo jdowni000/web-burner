@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -67,14 +66,21 @@ func main() {
 	err = csv_file(wd, json_files, uuid, google_sheet_file_name, google_sheet_id, iteration)
 	error_check(err)
 
-	// Upload csv file
+	// Upload csv file for summary
 	err = write_to_google_sheet(wd, google_sheet_file_name, google_parent_id, google_sheet_id, store_sheetid)
+	error_check(err)
+
+	// create csv files for each json file max vals
+	google_sheet_id, err = retrieve_sheetid(wd, store_sheetid, google_sheet_file_name)
+	error_check(err)
+	log.Println("Creating new tabs for each job with max values by job by node")
+	err = max_node_job_vals(wd, json_files, uuid, google_sheet_id)
 	error_check(err)
 }
 
 // Func retrieve_sheetid checks to see if there is an existing sheet to use and creates a google sheet if necessary
 func retrieve_sheetid(wd string, store_sheetid string, file_name string) (string, error) {
-	// Create temp dir if it has not been created
+	// Create gsheet dir if it has not been created
 	if !(check_file_exists(wd, "/gsheet")) {
 		log.Println("No gsheet dir found, creating temp dir for future sheetid files")
 		_, err := exec.Command("bash", "-c", "mkdir gsheet").Output()
@@ -82,6 +88,16 @@ func retrieve_sheetid(wd string, store_sheetid string, file_name string) (string
 			return "", err
 		}
 	}
+
+	// Create max-job-val dir if it has not been created
+	if !(check_file_exists(wd, "/gsheet/max-job-val")) {
+		log.Println("No max-job-val dir found, creating  dir for future job csv files")
+		_, err := exec.Command("bash", "-c", "mkdir gsheet/max-job-val").Output()
+		if err != nil {
+			return "", err
+		}
+	}
+
 	// Check to see if txt file for today exists with sheet id from a previous run
 	if check_file_exists(wd, "/gsheet/"+store_sheetid) {
 		// Return google sheet id
@@ -272,13 +288,6 @@ func error_check(err error) {
 func check_suffix(s string) bool {
 	resp := strings.HasSuffix(s, ".csv")
 	return resp
-}
-
-func create_sheet_tab_name(j string) string {
-	json_file := filepath.Base(j)
-	name := strings.TrimSuffix(json_file, filepath.Ext(json_file))
-	name = name + ".csv"
-	return name
 }
 
 // Func increment_iteration reads the iteration and increments by one
