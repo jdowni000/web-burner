@@ -99,12 +99,12 @@ func write_newsheet(csv_file string, sheet_name string, sheet_id string) error {
 		return err
 	}
 
-	log.Println("Attempting to write CSV file", csv_file, "to new sheet"+sheet_name)
+	// log.Println("Attempting to write CSV file", csv_file, "to new sheet"+sheet_name)
 	_, err = gsheet_srv.UpdateRangeCSV(sheet_id, sheet_name, f)
 	if err != nil {
 		return err
 	}
-	log.Println("Successfully wrote CSV file", csv_file, "to new sheet", sheet_name, "in google sheet id", sheet_id)
+	// log.Println("Successfully wrote CSV file", csv_file, "to new sheet", sheet_name, "in google sheet id", sheet_id)
 	return nil
 }
 
@@ -134,14 +134,21 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, she
 	w := csv.NewWriter(file)
 
 	if sheetid == "" {
-		log.Println("attempting to write to file here")
-		sum_table := []string{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}
-		err = w.Write(sum_table)
-		if err != nil {
-			log.Fatal(err)
+		sum_table := [][]string{{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}}
+		for _, record := range sum_table {
+			if err := w.Write(record); err != nil {
+				return err
+			}
 		}
+
+		// err = w.WriteAll(sum_table)
+		// if err != nil {
+		// 	return err
+		// }
 		w.Flush()
 	}
+
+	log.Println("Attempting to read json files and write data to csv file")
 
 	length := len(json_files)
 	i := 0
@@ -151,7 +158,6 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, she
 		j_path := filepath.Join(wd, "/collected-metrics/", j_trim)
 
 		resp, s, e, err := summary_data(j_path)
-		log.Println(resp)
 		if err != nil {
 			log.Println("Problem parsing json file", j, "with error", err)
 		}
@@ -183,11 +189,17 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, she
 		end_time = e
 		i++
 	}
-	log.Println(m)
-	csv_row := []string{iteration, start_time, end_time, uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"]}
-	err = w.Write(csv_row)
+	log.Println("Finsihed unmarshalling json files and retrieving data. Attempting to write to csv file", f)
+	csv_row := [][]string{{iteration, start_time, end_time, uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"]}}
+	// for _, record := range csv_row {
+	// 	if err := w.Write(record); err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	err = w.WriteAll(csv_row)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	w.Flush()
 	return nil
@@ -209,7 +221,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 	json_struct_req, key := json_identifier(json_file)
 
 	// Read data from json file
-	log.Println("Attempting to read " + json_file)
 	data, err := ioutil.ReadFile(json_file)
 	if err != nil {
 		return empty, empty_string, empty_string, err
@@ -223,7 +234,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 			return empty, empty_string, empty_string, err
 		}
 		len := len(jpl)
-		log.Println("length of data is ", len)
 		max_int = len - 1
 	} else if json_struct_req == "json_struct_float64_instance" {
 		// Unmarshal data
@@ -232,7 +242,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 			return empty, empty_string, empty_string, err
 		}
 		len := len(jfi)
-		log.Println("length of data is ", len)
 		max_int = len - 1
 	} else if json_struct_req == "json_struct_float64_node" {
 		// Unmarshal data
@@ -241,7 +250,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 			return empty, empty_string, empty_string, err
 		}
 		len := len(jfn)
-		log.Println("length of data is ", len)
 		max_int = len - 1
 	} else if json_struct_req == "json_struct_int" {
 		// Unmarshal data
@@ -250,7 +258,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 			return empty, empty_string, empty_string, err
 		}
 		len := len(jint)
-		log.Println("length of data is ", len)
 		max_int = len - 1
 	} else {
 		err := json.Unmarshal([]byte(data), &jint)
@@ -258,7 +265,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 			return empty, empty_string, empty_string, err
 		}
 		len := len(jint)
-		log.Println("length of data is ", len)
+		max_int = len - 1
 	}
 
 	if key == "nodeCPU" {
@@ -267,7 +274,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfi {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"nodeCPU", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
@@ -279,7 +285,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"nodeMemoryActive", strconv.Itoa(v.Value)}
 			}
 		}
@@ -291,7 +296,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"nodeMemoryAvailable", strconv.Itoa(v.Value)}
 			}
 		}
@@ -303,7 +307,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"nodeMemoryCached", strconv.Itoa(v.Value)}
 			}
 		}
@@ -315,7 +318,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfn {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"kubeletCPU", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
@@ -327,7 +329,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfn {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"kubeletMemory", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
@@ -339,7 +340,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfn {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"crioCPU", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
@@ -351,7 +351,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"crioMemory", strconv.Itoa(v.Value)}
 			}
 		}
@@ -363,7 +362,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				// temp = []string{v.JobName, v.Labels.Node, fmt.Sprintf("%f", (v.Value)), v.MetricName, v.Timestamp, v.UUID, v.Query}
 				column = []string{"default", strconv.Itoa(v.Value)}
 			}
 
