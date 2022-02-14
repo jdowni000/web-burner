@@ -83,8 +83,8 @@ func main() {
 
 	// create csv files for each json file max vals
 	log.Println("Creating new tabs for each job with max values by job by node")
-	// err = max_node_job_vals(wd, json_files, uuid, google_sheet_id)
-	// error_check(err)
+	err = max_node_job_vals(wd, json_files, uuid, google_sheet_id)
+	error_check(err)
 }
 
 // Func retrieve_sheetid checks to see if there is an existing sheet to use and creates a google sheet if necessary
