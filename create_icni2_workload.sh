@@ -99,7 +99,6 @@ echo "Lets create ICNI2 workloads..$uuid"
 kube-burner init -c ${1} -t ${token} --uuid $(uuidgen) --prometheus-url https://${prometheus_url} -m workload/metrics_full.yaml 
 
 echo "Lets generate a summary of the workloads..$uuid into Google Docs"
- # installing gsheets
   sudo yum -y install golang
-  go get github.com/cristoper/gsheet/cmd/gsheet
-./web-burner.git -uuid $uuid -parent "" #parent id here
+  go build
+./web-burner.git -uuid $uuid -parent $parent "" #parent id here

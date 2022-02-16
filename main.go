@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"flag"
 	"io"
 	"log"
@@ -18,22 +19,30 @@ import (
 
 var uuid string
 var google_parent_id string
+var push_google bool
 var google_sheet_file_name string
 var google_sheet_id string
+var gdrive_svc *gdrive.Service
+var gsheet_svc *gsheets.Service
 
 func init() {
 
 	u := flag.String("uuid", "", "uuid being used for workload")
 	p := flag.String("parent", "", "google sheet parent id")
+	g := flag.Bool("gdocs", false, "bool to push csv file to google docs, default is false")
 	flag.Parse()
 
 	uuid = derefString(u)
 	google_parent_id = derefString(p)
+	push_google = *g
 
 	if uuid == "" {
 		log.Fatal("Please provide uuid using flag '-uuid'")
 	}
-	if google_parent_id == "" {
+	if push_google == false && google_parent_id != "" {
+		log.Fatal("Parent ID given with flag 'parent', but flag 'gdocs' was set to false or unset and left to default.")
+	}
+	if push_google == true && google_parent_id == "" {
 		log.Fatal("Please provide google parent id using flag '-parent'")
 
 	}
@@ -45,72 +54,77 @@ func main() {
 	wd, err := os.Getwd()
 	error_check(err)
 
+	// Create gsheet dir if it has not been created
+	if !(check_file_exists(wd, "/gsheet")) {
+		log.Println("No gsheet dir found, creating temp dir for future sheetid files")
+		_, err := exec.Command("bash", "-c", "mkdir gsheet").Output()
+		error_check(err)
+	}
+
+	// Create max-job-val dir if it has not been created
+	if !(check_file_exists(wd, "/gsheet/max-job-val")) {
+		log.Println("No /gsheet/max-job-val dir found, creating  dir for future job csv files")
+		_, err := exec.Command("bash", "-c", "mkdir gsheet/max-job-val").Output()
+		error_check(err)
+	}
+
 	// Determine Date and set to var for file names
 	year, month, day := time.Now().Date()
 	store_sheetid := "Sheetid-" + strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".txt"
 	iteration_count := "iteration_count-" + strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".txt"
 	google_sheet_file_name = strconv.Itoa(year) + "-" + month.String() + "-" + strconv.Itoa(day) + ".csv"
 
-	// Create gdrive and gsheet svc
-	log.Println("Creating gdrive and gsheet services")
-	gdrive_svc, err := gdrive_svc()
-	error_check(err)
-	gsheet_svc, err := gsheet_svc()
-	error_check(err)
-
-	// Check for existing google sheet and write to local csv if it exists
-	log.Println("Determining if google sheet id exists already from previous runs today to append to")
-	google_sheet_id, err = retrieve_sheetid(wd, store_sheetid, google_sheet_file_name, gsheet_svc)
-	error_check(err)
+	// Create gdrive and gsheet svc and create/update csv file locally
+	if push_google == true {
+		gd, gs, err := google_docs(wd, store_sheetid, google_sheet_file_name)
+		error_check(err)
+		gdrive_svc = gd
+		gsheet_svc = gs
+		err = local_csv(wd, google_sheet_file_name)
+		error_check(err)
+	} else {
+		err = local_csv(wd, google_sheet_file_name)
+		error_check(err)
+	}
 
 	// Check for iteration count
 	iteration, err := iteration(wd, iteration_count)
 	error_check(err)
-	log.Println("This will be iteration", iteration)
+	log.Println("This will be", iteration)
 
 	// Retrieve json files
+	log.Println("Attempting to retrieve json files with uuid", uuid)
 	json_files := retrieve_json_files(uuid)
-	log.Println("Found", len(json_files), " files with uuid", uuid)
+	log.Println("Found", len(json_files), "files with uuid", uuid)
 
 	// Unmarshall json data and write to csv file
-	err = csv_file(wd, json_files, uuid, google_sheet_file_name, google_sheet_id, iteration)
+	log.Println("Attempting to unmarshal json data and calculate summary information to write to csv file", google_sheet_file_name)
+	err = csv_file(wd, json_files, uuid, google_sheet_file_name, iteration)
 	error_check(err)
+	log.Println("Succesfully wrote summary data to csv file", google_sheet_file_name)
 
-	// Upload csv file for summary
-	log.Println("Attempting to write csv file to google sheet")
-	google_sheet_id, err = write_to_google_sheet(wd, google_sheet_file_name, google_parent_id, google_sheet_id, store_sheetid, gdrive_svc, gsheet_svc)
-	error_check(err)
+	// Upload csv file to Google Docs
+	if push_google == true {
+		log.Println("Attempting to write csv file to google sheet")
+		gs_id, err := write_to_google_sheet(wd, google_sheet_file_name, google_parent_id, google_sheet_id, store_sheetid, gdrive_svc, gsheet_svc)
+		error_check(err)
+		google_sheet_id = gs_id
+	}
 
 	// create csv files for each json file max vals
 	log.Println("Creating new tabs for each job with max values by job by node")
-	err = max_node_job_vals(wd, json_files, uuid, google_sheet_id)
+	err = max_node_job_vals(wd, json_files, uuid, google_sheet_id, push_google)
 	error_check(err)
+	log.Println("Completed Successfully!")
 }
 
 // Func retrieve_sheetid checks to see if there is an existing sheet to use and creates a google sheet if necessary
 func retrieve_sheetid(wd string, store_sheetid string, file_name string, gsheet_svc *gsheets.Service) (string, error) {
-	// Create gsheet dir if it has not been created
-	if !(check_file_exists(wd, "/gsheet")) {
-		log.Println("No gsheet dir found, creating temp dir for future sheetid files")
-		_, err := exec.Command("bash", "-c", "mkdir gsheet").Output()
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// Create max-job-val dir if it has not been created
-	if !(check_file_exists(wd, "/gsheet/max-job-val")) {
-		log.Println("No max-job-val dir found, creating  dir for future job csv files")
-		_, err := exec.Command("bash", "-c", "mkdir gsheet/max-job-val").Output()
-		if err != nil {
-			return "", err
-		}
-	}
 
 	// Check to see if txt file for today exists with sheet id from a previous run
 	if check_file_exists(wd, "/gsheet/"+store_sheetid) {
 		// Return google sheet id
-		log.Println("Google Sheet already exists, retrieving sheet id!")
+		log.Println("Google Sheet file already exists from previous iteration, retrieving sheet id!")
 		cmd := "cat gsheet/" + store_sheetid
 		out, err := exec.Command("bash", "-c", cmd).Output()
 		if err != nil {
@@ -118,40 +132,17 @@ func retrieve_sheetid(wd string, store_sheetid string, file_name string, gsheet_
 		}
 		s := string(out)
 		sheetid := strings.TrimSpace(s)
-		err = gsheet_csv(wd, sheetid, file_name, gsheet_svc)
-		if err != nil {
-			return "", err
-		}
 		return sheetid, nil
 	}
 	// Create google sheet and return sheet id
-	log.Println("No sheet id found, will create new google sheet when uploading!")
+	log.Println("No previous sheet id found, will create new google sheet when uploading!")
 	return "", nil
 }
 
 // Func gsheet_csv retrieves csv data from google sheet
-func gsheet_csv(wd string, sheet_id string, file_name string, gsheet_svc *gsheets.Service) error {
-	f := wd + "/gsheet/" + file_name
-
-	// Delete csv file if it exists with old data
-	log.Println("Checking for exisitng csv file with the same name and removing to create a new one with up to date information")
-	_, err := os.Stat(f)
-	if err == nil {
-		log.Println("CSV filename " + file_name + " already exists: Removing existing file before proceeding!")
-		err = os.Remove(f)
-		if err != nil {
-			return err
-		}
-	}
-	// open csv
-	file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
+func gsheet_csv(wd string, sheet_id string, file_name string, gsheet_svc *gsheets.Service, file *os.File) error {
 	log.Println("Writing retrieved information from google sheet to append to new csv file")
-
+	// Retrieve information and write to new csv file
 	resp, err := gsheet_svc.GetRangeCSV(sheet_id, "Sheet1")
 	reader := bytes.NewReader(resp)
 	reader.WriteTo(file)
@@ -159,7 +150,72 @@ func gsheet_csv(wd string, sheet_id string, file_name string, gsheet_svc *gsheet
 	if err != nil {
 		return err
 	}
+	return nil
+}
 
+// func google_docs creates services required to upload
+func google_docs(wd string, store_sheetid string, file_name string) (*gdrive.Service, *gsheets.Service, error) {
+	f := wd + "/gsheet/" + file_name
+	log.Println("Creating gdrive and gsheet services")
+	gdrive_svc, err := gdrive_svc_create()
+	if err != nil {
+		return gdrive_svc, gsheet_svc, err
+	}
+	gsheet_svc, err = gsheet_svc_create()
+	if err != nil {
+		return gdrive_svc, gsheet_svc, err
+	}
+
+	// Check for existing google sheet and write to local csv if it exists
+	log.Println("Determining if google sheet id exists already from previous runs today to append to")
+	google_sheet_id, err = retrieve_sheetid(wd, store_sheetid, google_sheet_file_name, gsheet_svc)
+	error_check(err)
+
+	// Delete csv file if it exists with old data
+	log.Println("Checking for exisitng csv file with the same name and removing to create a new one with up to date information")
+	_, err = os.Stat(f)
+	if err == nil {
+		log.Println("CSV filename " + file_name + " already exists: Removing existing file before proceeding!")
+		err = os.Remove(f)
+		if err != nil {
+			return gdrive_svc, gsheet_svc, err
+		}
+		// Create csv file
+		file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			return gdrive_svc, gsheet_svc, err
+		}
+		defer file.Close()
+
+		err = gsheet_csv(wd, google_sheet_id, google_sheet_file_name, gsheet_svc, file)
+		if err != nil {
+			return gdrive_svc, gsheet_svc, err
+		}
+	}
+	return gdrive_svc, gsheet_svc, nil
+}
+
+// Func local_csv creates a local csv file if one does not exist to append to for multiple iterations
+func local_csv(wd string, file_name string) error {
+	f := wd + "/gsheet/" + file_name
+	_, err := os.Stat(f)
+	if err != nil {
+		// Create csv file
+		file, err := os.Create(f)
+		if err != nil {
+			return err
+		}
+		w := csv.NewWriter(file)
+		sum_table := [][]string{{"Iteration", "StartTime", "EndTime", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}}
+		for _, record := range sum_table {
+			if err := w.Write(record); err != nil {
+				if err != nil {
+					return err
+				}
+			}
+			w.Flush()
+		}
+	}
 	return nil
 }
 
@@ -216,7 +272,7 @@ func retrieve_json_files(uuid string) []string {
 }
 
 // Func gdrive_svc creates a gsheets drive service
-func gdrive_svc() (*gdrive.Service, error) {
+func gdrive_svc_create() (*gdrive.Service, error) {
 	var empty *gdrive.Service
 	// Create gdrive service
 	svc, err := gdrive.NewServiceWithCtx(context.TODO())
@@ -227,7 +283,7 @@ func gdrive_svc() (*gdrive.Service, error) {
 }
 
 // Func gsheet_svc creates a gsheets sheet service
-func gsheet_svc() (*gsheets.Service, error) {
+func gsheet_svc_create() (*gsheets.Service, error) {
 	var empty *gsheets.Service
 	// Create gsheet service
 	svc, err := gsheets.NewServiceWithCtx(context.TODO())

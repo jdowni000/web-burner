@@ -68,16 +68,6 @@ type JsonStructValFloatNode struct {
 	JobName    string  `json:"jobName"`
 }
 
-// Func csv_create creates a csv file
-func csv_create(file_name string) error {
-	// Create csv file
-	_, err := os.Create(file_name)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // Func write_newsheet creates a new sheet and uploads csv file data
 func write_newsheet(csv_file string, sheet_name string, sheet_id string) error {
 
@@ -88,7 +78,7 @@ func write_newsheet(csv_file string, sheet_name string, sheet_id string) error {
 	}
 
 	// Create new sheet
-	log.Println("Creating new sheet named " + sheet_name + " in google sheed id " + sheet_id)
+	// log.Println("Creating new sheet named " + sheet_name + " in google sheed id " + sheet_id)
 	err = gsheet_srv.NewSheet(sheet_id, sheet_name)
 	if err != nil {
 		return err
@@ -108,21 +98,12 @@ func write_newsheet(csv_file string, sheet_name string, sheet_id string) error {
 	return nil
 }
 
-//
-func csv_file(wd string, json_files []string, uuid string, file_name string, sheetid string, iteration string) error {
+// Func csv_file calculates total for a summary page of the google sheet file
+func csv_file(wd string, json_files []string, uuid string, file_name string, iteration string) error {
 	var start_time string
 	var end_time string
 	m := make(map[string]string)
 	f := strings.TrimSpace(wd + "/gsheet/" + file_name)
-
-	if sheetid == "" {
-		//create csv
-		log.Println("No Previous files detected, creating new csv file", f)
-		err := csv_create(f)
-		if err != nil {
-			return err
-		}
-	}
 
 	// open csv
 	file, err := os.OpenFile(f, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
@@ -132,23 +113,6 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, she
 	defer file.Close()
 
 	w := csv.NewWriter(file)
-
-	if sheetid == "" {
-		sum_table := [][]string{{"Iteration", "start_time", "end_time", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}}
-		for _, record := range sum_table {
-			if err := w.Write(record); err != nil {
-				return err
-			}
-		}
-
-		// err = w.WriteAll(sum_table)
-		// if err != nil {
-		// 	return err
-		// }
-		w.Flush()
-	}
-
-	log.Println("Attempting to read json files and write data to csv file")
 
 	length := len(json_files)
 	i := 0
@@ -191,12 +155,6 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, she
 	}
 	log.Println("Finsihed unmarshalling json files and retrieving data. Attempting to write to csv file", f)
 	csv_row := [][]string{{iteration, start_time, end_time, uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"]}}
-	// for _, record := range csv_row {
-	// 	if err := w.Write(record); err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	err = w.WriteAll(csv_row)
 	if err != nil {
 		return err
@@ -430,7 +388,7 @@ func json_identifier(json_file string) (string, string) {
 }
 
 // Func max_node_job_vals retrieves max values by job by node for a json file
-func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id string) error {
+func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id string, push_google bool) error {
 
 	var jpl []PodLatencyStruct
 	var jint []JsonStructValInt
@@ -463,10 +421,6 @@ func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id str
 		// Read data from json file
 		data, err := ioutil.ReadFile(j_path)
 		if err != nil {
-			return err
-		}
-		// Unmarshal data by required struct
-		if json_struct_req == "pod_latency_struct" {
 			// Unmarshal data
 			err := json.Unmarshal([]byte(data), &jpl)
 			if err != nil {
@@ -514,7 +468,7 @@ func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id str
 
 		// Retrieve all node and job namess
 		if json_struct_req == "pod_latency_struct" {
-			log.Println("Not ordering data by node by job for this type of csv file")
+			// log.Println("Not ordering data by node by job for this type of csv file")
 		} else if json_struct_req == "json_struct_float64_instance" {
 			for _, all := range jfi {
 				if !(exists(all_job_names, all.JobName)) {
@@ -662,9 +616,11 @@ func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id str
 				n++
 			}
 		}
-		err = write_newsheet(path_sn, sheet_name, sheet_id)
-		if err != nil {
-			return err
+		if push_google == true {
+			err = write_newsheet(path_sn, sheet_name, sheet_id)
+			if err != nil {
+				return err
+			}
 		}
 		i++
 	}
