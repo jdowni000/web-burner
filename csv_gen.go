@@ -98,6 +98,23 @@ func write_newsheet(csv_file string, sheet_name string, sheet_id string) error {
 	return nil
 }
 
+// Func gb_conv converts max vals from json file to gb to be more readable
+func gb_conv(resp string) (string, error) {
+	val, err := strconv.ParseFloat(resp, 64)
+	if err != nil {
+		return "", err
+	}
+	if val > 1000 {
+		gb := float64(val) / float64(1024) / float64(1024) / float64(1024)
+		s := fmt.Sprintf("%.2f", gb)
+		out := string(s) + "GB"
+		return out, nil
+	}
+	s := fmt.Sprintf("%.2f", val)
+	out := string(s) + "GB"
+	return out, nil
+}
+
 // Func csv_file calculates total for a summary page of the google sheet file
 func csv_file(wd string, json_files []string, uuid string, file_name string, iteration string) error {
 	var start_time string
@@ -126,28 +143,60 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			log.Println("Problem parsing json file", j, "with error", err)
 		}
 		if resp[0] == "nodeCPU" {
-			m["NodeCPU"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["NodeCPU"] = val
 		}
 		if resp[0] == "nodeMemoryActive" {
-			m["NodeMemoryActive"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["NodeMemoryActive"] = val
 		}
 		if resp[0] == "nodeMemoryAvailable" {
-			m["NodeMemoryAvailable"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["NodeMemoryAvailable"] = val
 		}
 		if resp[0] == "nodeMemoryCached" {
-			m["NodeMemoryCached"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["NodeMemoryCached"] = val
 		}
 		if resp[0] == "kubeletCPU" {
-			m["KubeletCPU"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["KubeletCPU"] = val
 		}
 		if resp[0] == "kubeletMemory" {
-			m["KubeletMemory"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["KubeletMemory"] = val
 		}
 		if resp[0] == "crioCPU" {
-			m["CrioCPU"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["CrioCPU"] = val
 		}
 		if resp[0] == "crioMemory" {
-			m["CrioMemory"] = resp[1]
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["CrioMemory"] = val
 		}
 		start_time = s
 		end_time = e
