@@ -375,12 +375,6 @@ func error_check(err error) {
 	}
 }
 
-// Func check_suffix checks if csv file name has .csv extension and returns bool
-func check_suffix(s string) bool {
-	resp := strings.HasSuffix(s, ".csv")
-	return resp
-}
-
 // Func increment_iteration reads the iteration and increments by one
 func increment_iteration(iteration string) (string, error) {
 	s := strings.Split(iteration, "_")
