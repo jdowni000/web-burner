@@ -198,12 +198,37 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			}
 			m["CrioMemory"] = val
 		}
+		if resp[0] == "API99thLatency" {
+			val, err := gb_conv(resp[1])
+			if err != nil {
+				return err
+			}
+			m["API99thLatency"] = val
+		}
+		if resp[0] == "podStatusCount" {
+			m["PodStatusCount"] = resp[1]
+		}
+		if resp[0] == "serviceCount" {
+			m["ServiceCount"] = resp[1]
+		}
+		if resp[0] == "namespaceCount" {
+			m["NamespaceCount"] = resp[1]
+		}
+		if resp[0] == "deploymentCount" {
+			m["DeploymentCount"] = resp[1]
+		}
+		if resp[0] == "99thEtcdDiskWalFsyncDurationSeconds" {
+			m["99thEtcdDiskWalFsyncDurationSeconds"] = resp[1]
+		}
+		if resp[0] == "etcdLeaderChangesRate" {
+			m["EtcdLeaderChangesRate"] = resp[1]
+		}
 		start_time = s
 		end_time = e
 		i++
 	}
 	log.Println("Finsihed unmarshalling json files and retrieving data. Attempting to write to csv file", f)
-	csv_row := [][]string{{iteration, start_time, end_time, uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"]}}
+	csv_row := [][]string{{iteration, start_time, end_time, uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"], m["API99thLatency"], m["PodStatusCount"], m["ServiceCount"], m["NamespaceCount"], m["DeploymentCount"], m["99thEtcdDiskWalFsyncDurationSeconds"], m["EtcdLeaderChangesRate"]}}
 	err = w.WriteAll(csv_row)
 	if err != nil {
 		return err
@@ -232,6 +257,8 @@ func summary_data(json_file string) ([]string, string, string, error) {
 	if err != nil {
 		return empty, empty_string, empty_string, err
 	}
+
+	log.Println("Attempting to unmarshal json file", json_file)
 
 	// Unmarshal data by required struct
 	if json_struct_req == "pod_latency_struct" {
@@ -363,6 +390,93 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
+	} else if key == "API99thLatency" {
+		var max float64
+		max = 0
+		for _, v := range jfi {
+			if v.Value > max {
+				max = v.Value
+				column = []string{"API99thLatency", fmt.Sprintf("%f", (v.Value))}
+			}
+		}
+		start_time = jfi[0].Timestamp
+		end_time = jfi[max_int].Timestamp
+	} else if key == "podStatusCount" {
+		count := 0
+		for _, v := range jint {
+			if v.Value > 0 {
+				count++
+				column = []string{"podStatusCount", strconv.Itoa(count)}
+			}
+		}
+		if count == 0 {
+			column = []string{"podStatusCount", strconv.Itoa(0)}
+		}
+		start_time = jint[0].Timestamp
+		end_time = jint[max_int].Timestamp
+	} else if key == "serviceCount" {
+		count := 0
+		for _, v := range jint {
+			if v.Value > 0 {
+				count++
+				column = []string{"serviceCount", strconv.Itoa(count)}
+			}
+		}
+		if count == 0 {
+			column = []string{"serviceCount", strconv.Itoa(0)}
+		}
+		start_time = jint[0].Timestamp
+		end_time = jint[max_int].Timestamp
+	} else if key == "namespaceCount" {
+		count := 0
+		for _, v := range jint {
+			if v.Value > 0 {
+				count++
+				column = []string{"namespaceCount", strconv.Itoa(count)}
+			}
+		}
+		if count == 0 {
+			column = []string{"namespaceCount", strconv.Itoa(0)}
+		}
+		start_time = jint[0].Timestamp
+		end_time = jint[max_int].Timestamp
+	} else if key == "deploymentCount" {
+		count := 0
+		for _, v := range jint {
+			if v.Value > 0 {
+				count++
+				column = []string{"deploymentCount", strconv.Itoa(count)}
+			}
+		}
+		if count == 0 {
+			column = []string{"deploymentCount", strconv.Itoa(0)}
+		}
+		start_time = jint[0].Timestamp
+		end_time = jint[max_int].Timestamp
+	} else if key == "99thEtcdDiskWalFsyncDurationSeconds" {
+		var max float64
+		max = 0
+		for _, v := range jfi {
+			if v.Value > max {
+				max = v.Value
+				column = []string{"99thEtcdDiskWalFsyncDurationSeconds", fmt.Sprintf("%f", (v.Value))}
+			}
+		}
+		start_time = jfi[0].Timestamp
+		end_time = jfi[max_int].Timestamp
+	} else if key == "etcdLeaderChangesRate" {
+		count := 0
+		for _, v := range jint {
+			if v.Value > 0 {
+				count++
+				column = []string{"etcdLeaderChangesRate", strconv.Itoa(count)}
+			}
+		}
+		if count == 0 {
+			column = []string{"etcdLeaderChangesRate", strconv.Itoa(0)}
+		}
+		start_time = jint[0].Timestamp
+		end_time = jint[max_int].Timestamp
 	} else if key == "default" {
 		var max int
 		max = 0
@@ -371,7 +485,6 @@ func summary_data(json_file string) ([]string, string, string, error) {
 				max = v.Value
 				column = []string{"default", strconv.Itoa(v.Value)}
 			}
-
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
@@ -430,7 +543,41 @@ func json_identifier(json_file string) (string, string) {
 		key = "crioMemory"
 		return json_struct_req, key
 	}
-
+	if strings.Contains(json_file, "API99thLatency") {
+		json_struct_req = "json_struct_float64_instance"
+		key = "API99thLatency"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "podStatusCount") {
+		json_struct_req = "json_struct_int"
+		key = "podStatusCount"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "serviceCount") {
+		json_struct_req = "json_struct_int"
+		key = "serviceCount"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "namespaceCount") {
+		json_struct_req = "json_struct_int"
+		key = "namespaceCount"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "deploymentCount") {
+		json_struct_req = "json_struct_int"
+		key = "deploymentCount"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "99thEtcdDiskWalFsyncDurationSeconds") {
+		json_struct_req = "json_struct_float64_instance"
+		key = "99thEtcdDiskWalFsyncDurationSeconds"
+		return json_struct_req, key
+	}
+	if strings.Contains(json_file, "etcdLeaderChangesRate") {
+		json_struct_req = "json_struct_int"
+		key = "etcdLeaderChangesRate"
+		return json_struct_req, key
+	}
 	json_struct_req = "json_struct_int"
 	key = "default"
 	return json_struct_req, key
@@ -470,6 +617,11 @@ func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id str
 		// Read data from json file
 		data, err := ioutil.ReadFile(j_path)
 		if err != nil {
+			return err
+		}
+
+		// Unmarshal data by required struct
+		if json_struct_req == "pod_latency_struct" {
 			// Unmarshal data
 			err := json.Unmarshal([]byte(data), &jpl)
 			if err != nil {

@@ -43,8 +43,7 @@ func init() {
 		log.Fatal("Parent ID given with flag 'parent', but flag 'gdocs' was set to false or unset and left to default.")
 	}
 	if push_google == true && google_parent_id == "" {
-		log.Fatal("Please provide google parent id using flag '-parent'")
-
+		log.Fatal("Google Docs set to true with flag 'gdoc', but no parent id given with flag 'parent'!")
 	}
 }
 
@@ -94,8 +93,10 @@ func main() {
 
 	// Retrieve json files
 	log.Println("Attempting to retrieve json files with uuid", uuid)
-	json_files := retrieve_json_files(uuid)
+	files_req := []string{"nodeCPU", "nodeMemoryActive", "nodeMemoryAvailable", "nodeMemoryCached", "kubeletMemory", "kubeletCPU", "crioCPU", "crioMemory", "API99thLatency", "podStatusCount", "serviceCount", "namespaceCount", "deploymentCount", "99thEtcdDiskWalFsyncDurationSeconds", "etcdLeaderChangesRate"}
+	json_files := retrieve_json_files(files_req, uuid)
 	log.Println("Found", len(json_files), "files with uuid", uuid)
+	log.Println(json_files)
 
 	// Unmarshall json data and write to csv file
 	log.Println("Attempting to unmarshal json data and calculate summary information to write to csv file", google_sheet_file_name)
@@ -113,7 +114,9 @@ func main() {
 
 	// create csv files for each json file max vals
 	log.Println("Creating new tabs for each job with max values by job by node")
-	err = max_node_job_vals(wd, json_files, uuid, google_sheet_id, push_google)
+	files_req_tab := []string{"nodeCPU", "nodeMemoryActive", "nodeMemoryAvailable", "nodeMemoryCached", "kubeletMemory", "kubeletCPU", "crioCPU", "crioMemory", "API99thLatency"}
+	json_files_tab := retrieve_json_files(files_req_tab, uuid)
+	err = max_node_job_vals(wd, json_files_tab, uuid, google_sheet_id, push_google)
 	error_check(err)
 	log.Println("Completed Successfully!")
 }
@@ -206,7 +209,7 @@ func local_csv(wd string, file_name string) error {
 			return err
 		}
 		w := csv.NewWriter(file)
-		sum_table := [][]string{{"Iteration", "StartTime", "EndTime", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory"}}
+		sum_table := [][]string{{"Iteration", "StartTime", "EndTime", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory", "API99thLatency", "PodCount", "ServiceCount", "NamespaceCount", "DeploymentCount", "99thEtcdDiskWalFsyncDurationSeconds", "EtcdLeaderChangeRate"}}
 		for _, record := range sum_table {
 			if err := w.Write(record); err != nil {
 				if err != nil {
@@ -253,9 +256,8 @@ func iteration(wd, iteration_file string) (string, error) {
 }
 
 // Func retrieve_json_files iterates over collected-metrics directory looking for json files that match uuid
-func retrieve_json_files(uuid string) []string {
+func retrieve_json_files(files_req []string, uuid string) []string {
 	var json_fies []string
-	files_req := []string{"nodeCPU", "nodeMemoryActive", "nodeMemoryAvailable", "nodeMemoryCached", "kubeletMemory", "kubeletCPU", "crioCPU", "crioMemory"}
 	length := len(files_req)
 	i := 0
 	for i < length {
@@ -263,6 +265,7 @@ func retrieve_json_files(uuid string) []string {
 		out, err := exec.Command("bash", "-c", command).Output()
 		if err != nil {
 			log.Println("File", files_req[i], "with uuid", uuid, "not found with error:", err)
+			i++
 			continue
 		}
 		json_fies = append(json_fies, string(out))
