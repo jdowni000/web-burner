@@ -243,11 +243,7 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			m["CrioMemory"] = val
 		}
 		if resp1[0] == "API99thLatency" {
-			val, err := float_cleanup(resp1[1])
-			if err != nil {
-				return err
-			}
-			m["API99thLatency"] = val
+			m["API99thLatency"] = resp1[1]
 		}
 		if resp1[0] == "podStatusCount" {
 			m["PodStatusCount"] = resp1[1]

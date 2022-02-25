@@ -42,6 +42,12 @@ func init() {
 	if push_google == false && google_parent_id != "" {
 		log.Fatal("Parent ID given with flag 'parent', but flag 'gdocs' was set to false or unset and left to default.")
 	}
+	if push_google == true {
+		check_env := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+		if check_env == "" {
+			log.Fatal("Env var GOOGLE_APPLICATION_CREDENTIALS has not been set with location of service account yaml file. See https://github.com/cristoper/gsheet#authentication-and-authorization")
+		}
+	}
 	if push_google == true && google_parent_id == "" {
 		log.Fatal("Google Docs set to true with flag 'gdoc', but no parent id given with flag 'parent'!")
 	}
@@ -332,6 +338,7 @@ func write_to_google_sheet(wd string, file_name string, parent string, sheet_id 
 		return "", err
 	}
 
+	log.Println("Writing csv data to google sheet id", sheet_id)
 	_, err = gsheet_svc.UpdateRangeCSV(sheet_id, "Sheet1", r)
 	if err != nil {
 		return "", err
