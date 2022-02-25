@@ -209,7 +209,7 @@ func local_csv(wd string, file_name string) error {
 			return err
 		}
 		w := csv.NewWriter(file)
-		sum_table := [][]string{{"Iteration", "StartTime", "EndTime", "UUID", "NodeCPU", "NodeMemoryActive", "NodeMemoryAvailable", "NodeMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory", "API99thLatency", "PodCount", "ServiceCount", "NamespaceCount", "DeploymentCount", "99thEtcdDiskWalFsyncDurationSeconds", "EtcdLeaderChangeRate"}}
+		sum_table := [][]string{{"Iteration", "StartTime", "EndTime", "UUID", "MasterCPU", "WorkerCPU", "MasterMemoryActive", "WorkerMemoryActive", "MasterMemoryAvailable", "WorkerMemoryAvailable", "MasterMemoryCached", "WorkerMemoryCached", "KubeletCPU", "KubeletMemory", "CrioCPU", "CrioMemory", "API99thLatency", "PodCount", "ServiceCount", "NamespaceCount", "DeploymentCount", "99thEtcdDiskWalFsyncDurationSeconds", "EtcdLeaderChangeRate"}}
 		for _, record := range sum_table {
 			if err := w.Write(record); err != nil {
 				if err != nil {

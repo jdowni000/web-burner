@@ -149,97 +149,130 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 		j_trim := strings.TrimSpace(j)
 		j_path := filepath.Join(wd, "/collected-metrics/", j_trim)
 
-		resp, s, e, err := summary_data(j_path)
+		resp1, resp2, s, e, err := summary_data(j_path)
 		if err != nil {
 			log.Println("Problem parsing json file", j, "with error", err)
 		}
-		if resp[0] == "nodeCPU" {
-			val, err := float_cleanup(resp[1])
+		// Make resp2 not empty to prevent break
+		if len(resp2) == 0 {
+			resp2 = []string{""}
+		}
+
+		if resp1[0] == "masterCPU" {
+			val, err := float_cleanup(resp1[1])
 			if err != nil {
 				return err
 			}
-			m["NodeCPU"] = val
+			m["MasterCPU"] = val
 		}
-		if resp[0] == "nodeMemoryActive" {
-			val, err := gb_conv(resp[1])
+		if resp2[0] == "workerCPU" {
+			val, err := float_cleanup(resp2[1])
 			if err != nil {
 				return err
 			}
-			m["NodeMemoryActive"] = val
+			m["WorkerCPU"] = val
 		}
-		if resp[0] == "nodeMemoryAvailable" {
-			val, err := gb_conv(resp[1])
+		if resp1[0] == "masterMemoryActive" {
+			val, err := gb_conv(resp1[1])
 			if err != nil {
 				return err
 			}
-			m["NodeMemoryAvailable"] = val
+			m["MasterMemoryActive"] = val
 		}
-		if resp[0] == "nodeMemoryCached" {
-			val, err := gb_conv(resp[1])
+		if resp2[0] == "workerMemoryActive" {
+			val, err := gb_conv(resp2[1])
 			if err != nil {
 				return err
 			}
-			m["NodeMemoryCached"] = val
+			m["WorkerMemoryActive"] = val
 		}
-		if resp[0] == "kubeletCPU" {
-			val, err := float_cleanup(resp[1])
+		if resp1[0] == "masterMemoryAvailable" {
+			val, err := gb_conv(resp1[1])
+			if err != nil {
+				return err
+			}
+			m["MasterMemoryAvailable"] = val
+		}
+		if resp2[0] == "workerMemoryAvailable" {
+			val, err := gb_conv(resp2[1])
+			if err != nil {
+				return err
+			}
+			m["WorkerMemoryAvailable"] = val
+		}
+		if resp1[0] == "masterMemoryCached" {
+			val, err := gb_conv(resp1[1])
+			if err != nil {
+				return err
+			}
+			m["MasterMemoryCached"] = val
+		}
+		if resp2[0] == "workerMemoryCached" {
+			val, err := gb_conv(resp2[1])
+			if err != nil {
+				return err
+			}
+			m["WorkerMemoryCached"] = val
+		}
+		if resp1[0] == "kubeletCPU" {
+			val, err := float_cleanup(resp1[1])
 			if err != nil {
 				return err
 			}
 			m["KubeletCPU"] = val
 		}
-		if resp[0] == "kubeletMemory" {
-			val, err := gb_conv(resp[1])
+		if resp1[0] == "kubeletMemory" {
+			val, err := gb_conv(resp1[1])
 			if err != nil {
 				return err
 			}
 			m["KubeletMemory"] = val
 		}
-		if resp[0] == "crioCPU" {
-			val, err := float_cleanup(resp[1])
+		if resp1[0] == "crioCPU" {
+			val, err := float_cleanup(resp1[1])
 			if err != nil {
 				return err
 			}
 			m["CrioCPU"] = val
 		}
-		if resp[0] == "crioMemory" {
-			val, err := gb_conv(resp[1])
+		if resp1[0] == "crioMemory" {
+			val, err := gb_conv(resp1[1])
 			if err != nil {
 				return err
 			}
 			m["CrioMemory"] = val
 		}
-		if resp[0] == "API99thLatency" {
-			val, err := float_cleanup(resp[1])
+		if resp1[0] == "API99thLatency" {
+			val, err := float_cleanup(resp1[1])
 			if err != nil {
 				return err
 			}
 			m["API99thLatency"] = val
 		}
-		if resp[0] == "podStatusCount" {
-			m["PodStatusCount"] = resp[1]
+		if resp1[0] == "podStatusCount" {
+			m["PodStatusCount"] = resp1[1]
 		}
-		if resp[0] == "serviceCount" {
-			m["ServiceCount"] = resp[1]
+		if resp1[0] == "serviceCount" {
+			m["ServiceCount"] = resp1[1]
 		}
-		if resp[0] == "namespaceCount" {
-			m["NamespaceCount"] = resp[1]
+		if resp1[0] == "namespaceCount" {
+			m["NamespaceCount"] = resp1[1]
 		}
-		if resp[0] == "deploymentCount" {
-			m["DeploymentCount"] = resp[1]
+		if resp1[0] == "deploymentCount" {
+			m["DeploymentCount"] = resp1[1]
 		}
-		if resp[0] == "99thEtcdDiskWalFsyncDurationSeconds" {
-			m["99thEtcdDiskWalFsyncDurationSeconds"] = resp[1]
+		if resp1[0] == "99thEtcdDiskWalFsyncDurationSeconds" {
+			m["99thEtcdDiskWalFsyncDurationSeconds"] = resp1[1]
 		}
-		if resp[0] == "etcdLeaderChangesRate" {
-			m["EtcdLeaderChangesRate"] = resp[1]
+		if resp1[0] == "etcdLeaderChangesRate" {
+			m["EtcdLeaderChangesRate"] = resp1[1]
 		}
 		start_time = s
 		end_time = e
 		i++
 	}
 	log.Println("Finsihed unmarshalling json files and retrieving data. Attempting to write to csv file", f)
-	csv_row := [][]string{{iteration, start_time, end_time, uuid, m["NodeCPU"], m["NodeMemoryActive"], m["NodeMemoryAvailable"], m["NodeMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"], m["API99thLatency"], m["PodStatusCount"], m["ServiceCount"], m["NamespaceCount"], m["DeploymentCount"], m["99thEtcdDiskWalFsyncDurationSeconds"], m["EtcdLeaderChangesRate"]}}
+	csv_row := [][]string{{iteration, start_time, end_time, uuid, m["MasterCPU"], m["WorkerCPU"], m["MasterMemoryActive"], m["WorkerMemoryActive"], m["MasterMemoryAvailable"], m["WorkerMemoryAvailable"], m["MasterMemoryCached"], m["WorkerMemoryCached"], m["KubeletCPU"], m["KubeletMemory"], m["CrioCPU"], m["CrioMemory"], m["API99thLatency"], m["PodStatusCount"], m["ServiceCount"], m["NamespaceCount"], m["DeploymentCount"], m["99thEtcdDiskWalFsyncDurationSeconds"], m["EtcdLeaderChangesRate"]}}
 	err = w.WriteAll(csv_row)
 	if err != nil {
 		return err
@@ -249,14 +282,15 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 }
 
 // Func summary_data unmarshalls a json file into defined structs and ranges over values to determine the max value
-func summary_data(json_file string) ([]string, string, string, error) {
+func summary_data(json_file string) ([]string, []string, string, string, error) {
 	var empty []string
 	var empty_string string
 	var jpl []PodLatencyStruct
 	var jint []JsonStructValInt
 	var jfi []JsonStructValFloatInstance
 	var jfn []JsonStructValFloatNode
-	var column []string
+	var resp1 []string
+	var resp2 []string
 	var start_time string
 	var end_time string
 	var max_int int
@@ -266,7 +300,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 	// Read data from json file
 	data, err := ioutil.ReadFile(json_file)
 	if err != nil {
-		return empty, empty_string, empty_string, err
+		return empty, empty, empty_string, empty_string, err
 	}
 
 	log.Println("Attempting to unmarshal json file", json_file)
@@ -276,7 +310,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jpl)
 		if err != nil {
-			return empty, empty_string, empty_string, err
+			return empty, empty, empty_string, empty_string, err
 		}
 		len := len(jpl)
 		max_int = len - 1
@@ -284,7 +318,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jfi)
 		if err != nil {
-			return empty, empty_string, empty_string, err
+			return empty, empty, empty_string, empty_string, err
 		}
 		len := len(jfi)
 		max_int = len - 1
@@ -292,7 +326,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jfn)
 		if err != nil {
-			return empty, empty_string, empty_string, err
+			return empty, empty, empty_string, empty_string, err
 		}
 		len := len(jfn)
 		max_int = len - 1
@@ -300,59 +334,98 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		// Unmarshal data
 		err := json.Unmarshal([]byte(data), &jint)
 		if err != nil {
-			return empty, empty_string, empty_string, err
+			return empty, empty, empty_string, empty_string, err
 		}
 		len := len(jint)
 		max_int = len - 1
 	} else {
 		err := json.Unmarshal([]byte(data), &jint)
 		if err != nil {
-			return empty, empty_string, empty_string, err
+			return empty, empty, empty_string, empty_string, err
 		}
 		len := len(jint)
 		max_int = len - 1
 	}
-
 	if key == "nodeCPU" {
-		var max float64
-		max = 0
+		var masterCPU float64
+		var workerCPU float64
+		masterCPU = 0
+		workerCPU = 0
 		for _, v := range jfi {
-			if v.Value > max {
-				max = v.Value
-				column = []string{"nodeCPU", fmt.Sprintf("%f", (v.Value))}
+			if strings.Contains(v.Labels.Node, "master") {
+				if v.Value > masterCPU {
+					masterCPU = v.Value
+					resp1 = []string{"masterCPU", fmt.Sprintf("%f", (v.Value))}
+				}
+			}
+			if strings.Contains(v.Labels.Node, "worker") {
+				if v.Value > workerCPU {
+					workerCPU = v.Value
+					resp2 = []string{"workerCPU", fmt.Sprintf("%f", (v.Value))}
+				}
 			}
 		}
 		start_time = jfi[0].Timestamp
 		end_time = jfi[max_int].Timestamp
 	} else if key == "nodeMemoryActive" {
-		var max int
-		max = 0
+		var masterMemoryActive int
+		var workerMemoryActive int
+		masterMemoryActive = 0
+		workerMemoryActive = 0
 		for _, v := range jint {
-			if v.Value > max {
-				max = v.Value
-				column = []string{"nodeMemoryActive", strconv.Itoa(v.Value)}
+			if strings.Contains(v.Labels.Node, "master") {
+				if v.Value > masterMemoryActive {
+					masterMemoryActive = v.Value
+					resp1 = []string{"masterMemoryActive", strconv.Itoa(v.Value)}
+				}
+			}
+			if strings.Contains(v.Labels.Node, "worker") {
+				if v.Value > workerMemoryActive {
+					workerMemoryActive = v.Value
+					resp2 = []string{"workerMemoryActive", strconv.Itoa(v.Value)}
+				}
 			}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
 	} else if key == "nodeMemoryAvailable" {
-		var max int
-		max = 0
+		var masterMemoryAvailable int
+		var workerMemoryAvailable int
+		masterMemoryAvailable = 0
+		workerMemoryAvailable = 0
 		for _, v := range jint {
-			if v.Value > max {
-				max = v.Value
-				column = []string{"nodeMemoryAvailable", strconv.Itoa(v.Value)}
+			if strings.Contains(v.Labels.Node, "master") {
+				if v.Value > masterMemoryAvailable {
+					masterMemoryAvailable = v.Value
+					resp1 = []string{"masterMemoryAvailable", strconv.Itoa(v.Value)}
+				}
+			}
+			if strings.Contains(v.Labels.Node, "worker") {
+				if v.Value > workerMemoryAvailable {
+					workerMemoryAvailable = v.Value
+					resp2 = []string{"workerMemoryAvailable", strconv.Itoa(v.Value)}
+				}
 			}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
 	} else if key == "nodeMemoryCached" {
-		var max int
-		max = 0
+		var masterMemoryCached int
+		var workerMemoryCached int
+		masterMemoryCached = 0
+		workerMemoryCached = 0
 		for _, v := range jint {
-			if v.Value > max {
-				max = v.Value
-				column = []string{"nodeMemoryCached", strconv.Itoa(v.Value)}
+			if strings.Contains(v.Labels.Node, "master") {
+				if v.Value > masterMemoryCached {
+					masterMemoryCached = v.Value
+					resp1 = []string{"masterMemoryCached", strconv.Itoa(v.Value)}
+				}
+			}
+			if strings.Contains(v.Labels.Node, "worker") {
+				if v.Value > workerMemoryCached {
+					workerMemoryCached = v.Value
+					resp2 = []string{"workerMemoryCached", strconv.Itoa(v.Value)}
+				}
 			}
 		}
 		start_time = jint[0].Timestamp
@@ -363,7 +436,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfn {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"kubeletCPU", fmt.Sprintf("%f", (v.Value))}
+				resp1 = []string{"kubeletCPU", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
 		start_time = jfn[0].Timestamp
@@ -374,7 +447,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfn {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"kubeletMemory", fmt.Sprintf("%f", (v.Value))}
+				resp1 = []string{"kubeletMemory", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
 		start_time = jfn[0].Timestamp
@@ -385,7 +458,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfn {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"crioCPU", fmt.Sprintf("%f", (v.Value))}
+				resp1 = []string{"crioCPU", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
 		start_time = jfn[0].Timestamp
@@ -396,7 +469,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"crioMemory", strconv.Itoa(v.Value)}
+				resp1 = []string{"crioMemory", strconv.Itoa(v.Value)}
 			}
 		}
 		start_time = jint[0].Timestamp
@@ -407,7 +480,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfi {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"API99thLatency", fmt.Sprintf("%f", (v.Value))}
+				resp1 = []string{"API99thLatency", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
 		start_time = jfi[0].Timestamp
@@ -417,11 +490,11 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > 0 {
 				count++
-				column = []string{"podStatusCount", strconv.Itoa(count)}
+				resp1 = []string{"podStatusCount", strconv.Itoa(count)}
 			}
 		}
 		if count == 0 {
-			column = []string{"podStatusCount", strconv.Itoa(0)}
+			resp1 = []string{"podStatusCount", strconv.Itoa(0)}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
@@ -430,11 +503,11 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > 0 {
 				count++
-				column = []string{"serviceCount", strconv.Itoa(count)}
+				resp1 = []string{"serviceCount", strconv.Itoa(count)}
 			}
 		}
 		if count == 0 {
-			column = []string{"serviceCount", strconv.Itoa(0)}
+			resp1 = []string{"serviceCount", strconv.Itoa(0)}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
@@ -443,11 +516,11 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > 0 {
 				count++
-				column = []string{"namespaceCount", strconv.Itoa(count)}
+				resp1 = []string{"namespaceCount", strconv.Itoa(count)}
 			}
 		}
 		if count == 0 {
-			column = []string{"namespaceCount", strconv.Itoa(0)}
+			resp1 = []string{"namespaceCount", strconv.Itoa(0)}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
@@ -456,11 +529,11 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > 0 {
 				count++
-				column = []string{"deploymentCount", strconv.Itoa(count)}
+				resp1 = []string{"deploymentCount", strconv.Itoa(count)}
 			}
 		}
 		if count == 0 {
-			column = []string{"deploymentCount", strconv.Itoa(0)}
+			resp1 = []string{"deploymentCount", strconv.Itoa(0)}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
@@ -470,7 +543,7 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jfi {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"99thEtcdDiskWalFsyncDurationSeconds", fmt.Sprintf("%f", (v.Value))}
+				resp1 = []string{"99thEtcdDiskWalFsyncDurationSeconds", fmt.Sprintf("%f", (v.Value))}
 			}
 		}
 		start_time = jfi[0].Timestamp
@@ -480,11 +553,11 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > 0 {
 				count++
-				column = []string{"etcdLeaderChangesRate", strconv.Itoa(count)}
+				resp1 = []string{"etcdLeaderChangesRate", strconv.Itoa(count)}
 			}
 		}
 		if count == 0 {
-			column = []string{"etcdLeaderChangesRate", strconv.Itoa(0)}
+			resp1 = []string{"etcdLeaderChangesRate", strconv.Itoa(0)}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
@@ -494,13 +567,13 @@ func summary_data(json_file string) ([]string, string, string, error) {
 		for _, v := range jint {
 			if v.Value > max {
 				max = v.Value
-				column = []string{"default", strconv.Itoa(v.Value)}
+				resp1 = []string{"default", strconv.Itoa(v.Value)}
 			}
 		}
 		start_time = jint[0].Timestamp
 		end_time = jint[max_int].Timestamp
 	}
-	return column, start_time, end_time, nil
+	return resp1, resp2, start_time, end_time, nil
 }
 
 // Func json_identifier determines what json file is being used to pass in correct struct for unmarsahlling
