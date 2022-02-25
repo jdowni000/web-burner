@@ -113,10 +113,10 @@ func main() {
 	}
 
 	// create csv files for each json file max vals
-	log.Println("Creating new tabs for each job with max values by job by node")
-	files_req_tab := []string{"nodeCPU", "nodeMemoryActive", "nodeMemoryAvailable", "nodeMemoryCached", "kubeletMemory", "kubeletCPU", "crioCPU", "crioMemory", "API99thLatency"}
-	json_files_tab := retrieve_json_files(files_req_tab, uuid)
-	err = max_node_job_vals(wd, json_files_tab, uuid, google_sheet_id, push_google)
+	log.Println("Creating new csv files locally in /gsheet/max-job-val for each job with max values by job by node")
+	files_req = []string{"nodeCPU", "nodeMemoryActive", "nodeMemoryAvailable", "nodeMemoryCached", "kubeletMemory", "kubeletCPU", "crioCPU", "crioMemory", "API99thLatency"}
+	json_files = retrieve_json_files(files_req, uuid)
+	err = max_node_job_vals(wd, json_files, uuid)
 	error_check(err)
 	log.Println("Completed Successfully!")
 }

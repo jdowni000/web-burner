@@ -115,6 +115,17 @@ func gb_conv(resp string) (string, error) {
 	return out, nil
 }
 
+// Func float_cleanup rounds float to 2 decimal places for easier reading
+func float_cleanup(resp string) (string, error) {
+	val, err := strconv.ParseFloat(resp, 64)
+	if err != nil {
+		return "", err
+	}
+	s := fmt.Sprintf("%.2f", val)
+	out := string(s)
+	return out, nil
+}
+
 // Func csv_file calculates total for a summary page of the google sheet file
 func csv_file(wd string, json_files []string, uuid string, file_name string, iteration string) error {
 	var start_time string
@@ -143,7 +154,7 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			log.Println("Problem parsing json file", j, "with error", err)
 		}
 		if resp[0] == "nodeCPU" {
-			val, err := gb_conv(resp[1])
+			val, err := float_cleanup(resp[1])
 			if err != nil {
 				return err
 			}
@@ -171,7 +182,7 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			m["NodeMemoryCached"] = val
 		}
 		if resp[0] == "kubeletCPU" {
-			val, err := gb_conv(resp[1])
+			val, err := float_cleanup(resp[1])
 			if err != nil {
 				return err
 			}
@@ -185,7 +196,7 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			m["KubeletMemory"] = val
 		}
 		if resp[0] == "crioCPU" {
-			val, err := gb_conv(resp[1])
+			val, err := float_cleanup(resp[1])
 			if err != nil {
 				return err
 			}
@@ -199,7 +210,7 @@ func csv_file(wd string, json_files []string, uuid string, file_name string, ite
 			m["CrioMemory"] = val
 		}
 		if resp[0] == "API99thLatency" {
-			val, err := gb_conv(resp[1])
+			val, err := float_cleanup(resp[1])
 			if err != nil {
 				return err
 			}
@@ -584,7 +595,7 @@ func json_identifier(json_file string) (string, string) {
 }
 
 // Func max_node_job_vals retrieves max values by job by node for a json file
-func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id string, push_google bool) error {
+func max_node_job_vals(wd string, json_files []string, uuid string) error {
 
 	var jpl []PodLatencyStruct
 	var jint []JsonStructValInt
@@ -815,12 +826,6 @@ func max_node_job_vals(wd string, json_files []string, uuid string, sheet_id str
 					j++
 				}
 				n++
-			}
-		}
-		if push_google == true {
-			err = write_newsheet(path_sn, sheet_name, sheet_id)
-			if err != nil {
-				return err
 			}
 		}
 		i++

@@ -8,6 +8,8 @@ export QPS=${QPS:-20}
 export BURST=${BURST:-20}
 export SCALE=${SCALE:-1}
 export BFD=${BFD:-false}
+export PARENTID=${PARENTID}
+export GODCS=${GDOCS}
 
 export vf_serving_factor=140
 num_vfs=$(( SCALE*vf_serving_factor))
@@ -101,4 +103,8 @@ kube-burner init -c ${1} -t ${token} --uuid $(uuidgen) --prometheus-url https://
 echo "Lets generate a summary of the workloads..$uuid into Google Docs"
   sudo yum -y install golang
   go build
-./web-burner.git -uuid $uuid -parent $parent "" #parent id here
+  if [[ $GDOCS == true]]; then
+    ./web-burner.git -uuid $uuid -parent $PARENTID -gdocs=${GDOCS}
+  else;
+    ./web-burner.git -uuid $uuid
+  fi
