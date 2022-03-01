@@ -104,7 +104,7 @@ echo "Lets generate a summary of the workloads..$uuid into Google Docs"
   sudo yum -y install golang
   go build
   if [[ $GDOCS == true]]; then
-    ./web-burner.git -uuid $uuid -parent $PARENTID -gdocs=${GDOCS}
+    ./web-burner.git -uuid $uuid
   else;
     ./web-burner.git -uuid $uuid
   fi
