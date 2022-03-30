@@ -97,14 +97,14 @@ echo "Pausing for a minute.."
 sleep 60 # sleep for a minute before actual workload
 
 
-echo "Lets create ICNI2 workloads..$UUID"
+echo "Lets create ICNI2 workloads..$uuid"
 kube-burner init -c ${1} -t ${token} --uuid $(uuidgen) --prometheus-url https://${prometheus_url} -m workload/metrics_full.yaml 
 
-echo "Lets generate a summary of the workloads..$UUID into Google Docs"
+echo "Lets generate a summary of the workloads..$uuid into Google Docs"
   sudo yum -y install golang
   go build
   if [[ $GDOCS == "true" ]]; then
-    ./web-burner.git -uuid $UUID -parent $PARENTID -gdocs=$GDOCS
+    ./web-burner.git -uuid $uuid -parent $PARENTID -gdocs=$GDOCS
   else
-    ./web-burner.git -uuid $UUID
+    ./web-burner.git -uuid $uuid
   fi
