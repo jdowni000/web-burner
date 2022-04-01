@@ -10,6 +10,7 @@ export SCALE=${SCALE:-1}
 export BFD=${BFD:-false}
 export PARENTID=${PARENTID}
 export GDOCS=${GDOCS:-false}
+uuid=${UUID}
 
 export vf_serving_factor=140
 num_vfs=$(( SCALE*vf_serving_factor))
@@ -98,12 +99,14 @@ sleep 60 # sleep for a minute before actual workload
 
 
 echo "Lets create ICNI2 workloads..$uuid"
-kube-burner init -c ${1} -t ${token} --uuid $(uuidgen) --prometheus-url https://${prometheus_url} -m workload/metrics_full.yaml 
+kube-burner init -c ${1} -t ${token} --uuid $uuid --prometheus-url https://${prometheus_url} -m workload/metrics_full.yaml 
 
 echo "Lets generate a summary of the workloads..$uuid into Google Docs"
   sudo yum -y install golang
   go build
   if [[ $GDOCS == "true" ]]; then
+    # Retrieve Servide Account yaml file
+    # Set env var GOOGLE_APPLICATION_CREDENTIALS to locationi of yaml file
     ./web-burner.git -uuid $uuid -parent $PARENTID -gdocs=$GDOCS
   else
     ./web-burner.git -uuid $uuid
